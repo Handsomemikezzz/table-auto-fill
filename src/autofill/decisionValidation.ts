@@ -1,3 +1,4 @@
+import { RULE_PROVIDER_ID } from './ruleDecisions.ts';
 import { parseFlexibleDate, areEquivalentDates } from '../utils/dateValue.ts';
 import type { DecisionRequest, FieldDecision, FieldObservation, ProfileFact } from './contracts.ts';
 
@@ -23,7 +24,7 @@ export function validateDecision(decision: FieldDecision, field: FieldObservatio
     if (fact.precision && decision.targetOptionIds.some(id => { const label = field.options.find(option => option.id === id)!.label; return parseFlexibleDate(label) && !areEquivalentDates(fact.value, label); })) return { error: '网站日期选项改变了事实或日期精度' };
     if (!['select', 'radio', 'checkbox', 'combobox'].includes(field.kind)) return { error: '当前控件不支持选择选项' };
   }
-  if (decision.nextAction === 'write' && ['select', 'radio', 'checkbox', 'combobox'].includes(field.kind)) return { error: '选择控件必须由模型指定真实选项' };
+  if (decision.nextAction === 'write' && decision.modelId !== RULE_PROVIDER_ID && ['select', 'radio', 'checkbox', 'combobox'].includes(field.kind)) return { error: '选择控件必须由模型指定真实选项' };
   return { fact };
 }
 

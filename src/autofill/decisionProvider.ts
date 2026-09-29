@@ -7,7 +7,7 @@ export const DECISION_SYSTEM_PROMPT = `你是招聘表单的资料绑定决策�
 按 groupId 为同一经历绑定同一个 recordId。不要猜学历、学位、日期精度、数字选项编码，不编造答案，不生成新经历。
 只能引用提供的 factId、meaningId、subject、recordId，程序自己读取事实。不要输出 value、CSS、JavaScript 或网络请求。
 选择控件必须选择真实、可用、语义等价的 targetOptionIds；不能用近似选项。未读取或部分读取时可 readOptions（可附 factId 作为搜索词）；所有选项都不适用时 manual。
-已有值默认保留。缺事实用 requestFact，含义或经历不确定用 requestMeaning，无法操作用 manual，并用 uncertaintyReason 简短说明。
+已有值默认保留。没有已保存的答案时用 requestFact，让该项留空；不要要求用户必须补充。含义或经历不确定但存在相关事实时用 requestMeaning，无法操作用 manual，并用 uncertaintyReason 简短说明需要核对什么；不向用户提 registry、内部 ID 或系统实现。
 dependencyIds 只能引用本批字段，按联动关系建立依赖。同一组日期分别给出决策。不要覆盖资料不足。
 只输出 JSON 对象 {"decisions":[...]}。每项包含 fieldId,snapshotVersion,meaningId,subject,recordId(有则必须),factId,targetOptionIds(选择时),dependencyIds:[],nextAction:write|select|readOptions|requestFact|requestMeaning|manual,evidenceIds:[],uncertaintyReason。
 executionEvidence 只说明控件曾经怎样操作，不证明语义正确，也不能替代本次决策。

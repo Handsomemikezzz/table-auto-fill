@@ -1,3 +1,4 @@
+import { getPersonalAdditionalFields } from '../shared/personalFields.ts';
 import { getResumeLibrary } from '../shared/resumes.ts';
 import { versionOf } from '../autofill/contracts.ts';
 import { StorageService } from '../shared/storage.ts';
@@ -7,7 +8,7 @@ import { LLMDecisionProvider } from '../autofill/decisionProvider.ts';
 import type { ControlExperience, FillContextData, MeaningCorrection, FieldObservation, DecisionProvider } from '../autofill/contracts.ts';
 import { validateModule } from '../autofill/decisionValidation.ts';
 
-type Session = FillContextData & { origin: string; owner: string; provider: DecisionProvider; controller: AbortController; createdAt: number; baseProfileVersion: string; attachmentId?: string; attachmentVersion?: string };
+type Session = FillContextData & { origin: string; owner: string; provider?: DecisionProvider; controller: AbortController; createdAt: number; baseProfileVersion: string; attachmentId?: string; attachmentVersion?: string };
 const sessions = new Map<string, Session>();
 const CORRECTIONS_KEY = 'meaningCorrectionsV1';
 const EXPERIENCES_KEY = 'controlExperiencesV1';
@@ -27,8 +28,8 @@ export async function beginFillSession(payload: { sessionId: string; sourceId: s
   for (const [id, session] of sessions) if (Date.now() - session.createdAt > 30 * 60_000 || session.owner === ownerOf(sender)) { session.controller.abort(); sessions.delete(id); }
   const [profile, config] = await Promise.all([StorageService.getUserProfile(), StorageService.getLLMConfig()]);
   if (!profile) throw new Error('请先保存个人资料');
-  if (!config?.baseUrl?.trim() || !config.model?.trim()) throw new Error('暂时无法连接填写服务，请在设置中配置模型连接');
-  const registry = createFieldRegistry(profile.additionalFacts);
+  const modelAvailable = Boolean(config?.baseUrl?.trim() && config.model?.trim());
+  const registry = createFieldRegistry(getPersonalAdditionalFields(profile));
   const snapshot = createProfileSnapshot(profile, payload.sourceId, registry);
   for (const fact of snapshot.facts.filter(fact => fact.meaningId.startsWith('saved.'))) registry.push({ id: fact.meaningId, label: fact.source.replace('已保存答案：', ''), subject: fact.subject, valueType: 'text', sourceCollection: 'customInformation', key: fact.id, aliases: [], allowedTransformations: [], scope: 'user', version: 1, provenance: 'user-saved' });
   const baseProfileVersion = snapshot.version;
@@ -39,25 +40,27 @@ export async function beginFillSession(payload: { sessionId: string; sourceId: s
     snapshot.facts.push({ id: `attachment:${attachment.id}`, meaningId: 'attachment.resumeFile', subject: 'self', value: attachment.fileName, source: '用户本次选择的附件' });
     snapshot.version = versionOf({ baseProfileVersion, attachment: { id: attachment.id, fileName: attachment.fileName, uploadDate: attachment.uploadDate } });
   }
-  const context = { sessionId: payload.sessionId, saveProfileVersion: baseProfileVersion, profile: snapshot, registry, registryVersion: registryVersion(registry) };
+  const context = { sessionId: payload.sessionId, modelAvailable, corrections: [], saveProfileVersion: baseProfileVersion, profile: snapshot, registry, registryVersion: registryVersion(registry) };
   const origin = sender.url ? new URL(sender.url).origin : payload.origin;
-  sessions.set(payload.sessionId, { ...context, origin, owner: ownerOf(sender), provider: new LLMDecisionProvider(config), controller: new AbortController(), createdAt: Date.now(), baseProfileVersion, attachmentId: attachment?.id, attachmentVersion: attachment ? versionOf(attachment.fileData) : undefined });
+  sessions.set(payload.sessionId, { ...context, origin, owner: ownerOf(sender), provider: modelAvailable ? new LLMDecisionProvider(config!) : undefined, controller: new AbortController(), createdAt: Date.now(), baseProfileVersion, attachmentId: attachment?.id, attachmentVersion: attachment ? versionOf(attachment.fileData) : undefined });
   return context;
 }
 export async function decideFillFields(payload: { sessionId: string; fields: FieldObservation[]; corrections?: MeaningCorrection[] }, sender: chrome.runtime.MessageSender) {
   const session = sessions.get(payload.sessionId);
   if (!session || session.owner !== ownerOf(sender) || session.controller.signal.aborted) throw new Error('填写会话已停止，请重新开始');
+  if (!session.provider) throw new Error('尚未配置 AI，规则填写已完成');
   if (!payload.fields.length || payload.fields.length > 100) throw new Error('字段批次大小无效');
   const currentProfile = await StorageService.getUserProfile();
   if (!currentProfile || createProfileSnapshot(currentProfile, session.profile.sourceId, session.registry).version !== session.baseProfileVersion) throw new Error('资料已更新，请重新开始填写');
-  const corrections = [...await getCorrections(), ...(payload.corrections || [])].filter(item => item.enabled && item.confirmedAt && payload.fields.some(field => (field.origin || session.origin) === item.origin && field.signature === item.signature) && item.profileVersion === session.profile.version && item.registryVersion === session.registryVersion && payload.fields.some(field => field.signature === item.signature));
-  const executionEvidence = (await getExperiences()).filter(item => item.enabled && payload.fields.some(field => (field.origin || session.origin) === item.origin && field.signature === item.signature) && item.profileVersion === session.profile.version && item.registryVersion === session.registryVersion && payload.fields.some(field => field.signature === item.signature));
+  const corrections = (payload.corrections || []).filter(item => item.enabled && item.confirmedAt && payload.fields.some(field => (field.origin || session.origin) === item.origin && field.signature === item.signature) && item.profileVersion === session.profile.version && item.registryVersion === session.registryVersion && payload.fields.some(field => field.signature === item.signature));
+  const executionEvidence: ControlExperience[] = [];
   const request = { executionEvidence, fields: payload.fields, profile: session.profile, registry: session.registry, registryVersion: session.registryVersion, corrections };
   if (session.controller.signal.aborted) throw new Error('填写已停止');
   const controller = new AbortController();
   const cancel = () => controller.abort();
   session.controller.signal.addEventListener('abort', cancel, { once: true });
-  const timeout = setTimeout(cancel, 45_000);
+  let timedOut = false;
+  const timeout = setTimeout(() => { timedOut = true; cancel(); }, 20_000);
   try {
     const decisions = await session.provider.decide(request, controller.signal);
     if (controller.signal.aborted || session.controller.signal.aborted) throw new Error('填写已停止或服务超时');
@@ -67,9 +70,10 @@ export async function decideFillFields(payload: { sessionId: string; fields: Fie
     // Local validation is repeated in the page immediately before each operation.
     const errors = validateModule(decisions, request);
     return decisions.map(decision => errors.has(decision.fieldId) ? { ...decision, nextAction: 'requestMeaning' as const, uncertaintyReason: errors.get(decision.fieldId) } : decision);
-  } catch (error) {
+  } catch {
     if (session.controller.signal.aborted) throw new Error('填写已停止');
-    throw new Error(`暂时无法连接填写服务：${error instanceof Error ? error.message : '请求失败'}`);
+    if (timedOut) throw new Error('AI 匹配超时，此项先留空');
+    throw new Error('AI 暂时无法完成匹配，此项可稍后处理');
   } finally { clearTimeout(timeout); session.controller.signal.removeEventListener('abort', cancel); }
 }
 export function endFillSession(id: string, sender: chrome.runtime.MessageSender) {

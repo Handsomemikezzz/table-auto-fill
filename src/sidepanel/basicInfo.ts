@@ -1,3 +1,4 @@
+import { PERSONAL_EXTRA_FIELDS } from '../shared/personalFields.ts';
 import type { PersonalInfo } from '../shared/types.ts';
 
 export type BasicInfoField = {
@@ -32,7 +33,7 @@ export function toSingleLinePreview(
 }
 
 export function buildBasicInfoItems(personal: PersonalInfo) {
-  return BASIC_INFO_FIELDS.map(field => {
+  const items = BASIC_INFO_FIELDS.map(field => {
     const raw = String(personal[field.key] ?? '').trim();
     const displayValue = field.key === 'selfEvaluation'
       ? toSingleLinePreview(raw)
@@ -46,4 +47,5 @@ export function buildBasicInfoItems(personal: PersonalInfo) {
       empty: raw === '',
     };
   });
+  return [...items, ...PERSONAL_EXTRA_FIELDS.filter(field => personal[field.key]?.trim()).map(field => ({ key: field.key as string, label: field.label, value: personal[field.key]!, displayValue: personal[field.key]!, empty: false })), ...(personal.additionalFields || []).filter(field => field.value.trim()).map(field => ({ key: `extra-${field.id}`, label: field.label, value: field.value, displayValue: field.value, empty: false }))];
 }

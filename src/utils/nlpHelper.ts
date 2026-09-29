@@ -459,7 +459,7 @@ export class NLPHelper {
     const result: Partial<PersonalInfo> = {};
 
     // 明确列出标签，便于一行中连续出现多个“标签: 值”时逐项切开。
-    const labelMap: Array<[string, keyof PersonalInfo]> = [
+    const labelMap: Array<[string, Exclude<keyof PersonalInfo, 'additionalFields'>]> = [
       ['政治面貌', 'politicalStatus'], ['政治状态', 'politicalStatus'],
       ['党派', 'politicalStatus'], ['状态', 'politicalStatus'],
       ['出生日期', 'birthDate'], ['出生年月', 'birthDate'],

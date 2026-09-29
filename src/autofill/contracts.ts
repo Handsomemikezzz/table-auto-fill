@@ -58,6 +58,7 @@ export interface FieldObservation {
   options: ControlOption[];
   optionsState: 'unread' | 'partial' | 'complete';
   candidates: string[];
+  ruleBinding?: { meaningId: string; recordId?: string; confidence: number };
   evidence?: string[];
 }
 export interface FieldDecision {
@@ -104,6 +105,8 @@ export interface DecisionProvider {
 export interface FillContextData {
   sessionId: string;
   saveProfileVersion?: string;
+  modelAvailable?: boolean;
+  corrections?: MeaningCorrection[];
   profile: ProfileSnapshot;
   registry: FieldDefinition[];
   registryVersion: string;
@@ -112,12 +115,12 @@ export interface SessionItem {
   observation: FieldObservation;
   decision?: FieldDecision;
   outcome?: FillOutcome;
-  status: 'pending' | 'verified' | 'assisted' | 'skipped' | 'existing' | 'todo';
+  status: 'pending' | 'verified' | 'assisted' | 'skipped' | 'existing' | 'todo' | 'missing';
   reason: string;
   attemptedPlans: string[];
   decisionAttempts?: number;
 }
-export type SessionPhase = 'understanding' | 'matching' | 'writing' | 'complete' | 'stopped';
+export type SessionPhase = 'understanding' | 'rules' | 'matching' | 'writing' | 'complete' | 'stopped';
 export function versionOf(value: unknown): string {
   const text = JSON.stringify(value);
   let hash = 2166136261;

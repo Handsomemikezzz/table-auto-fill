@@ -43,12 +43,21 @@ function validateOptionalObjectArray(value: unknown, fields: string[]): boolean 
   return value === undefined || validateObjectArray(value, fields);
 }
 
+function validatePersonalFields(value: unknown): boolean {
+  return value === undefined || (Array.isArray(value) && value.every(item => isPlainObject(item)
+    && ['id', 'meaningId', 'label', 'subject', 'value', 'updatedAt'].every(key => typeof item[key] === 'string')
+    && ['text', 'date'].includes(item.valueType as string)
+    && (item.expiresAt === undefined || typeof item.expiresAt === 'string')));
+}
+
 function validateResumeProfileSnapshot(value: unknown): boolean {
   if (!isPlainObject(value) || !isPlainObject(value.personal)) return false;
   if (!hasOnlyStringFields(value.personal, [
     'name', 'gender', 'birthDate', 'phone', 'email', 'wechat', 'idCard',
     'politicalStatus', 'ethnicity', 'hometown', 'currentAddress', 'selfEvaluation',
+    'age', 'portfolioUrl', 'preferredCities', 'languageSkills',
   ])) return false;
+  if (!validatePersonalFields(value.personal.additionalFields)) return false;
   if (!validateObjectArray(value.education, [
     'id', 'school', 'college', 'educationType', 'major', 'majorCategory', 'degree', 'academicDegree',
     'startDate', 'endDate', 'gpa', 'ranking',
@@ -67,8 +76,10 @@ function validateUserProfile(value: unknown): value is UserProfile {
   if (!hasOnlyStringFields(value.personal, [
     'name', 'gender', 'birthDate', 'phone', 'email', 'wechat', 'idCard',
     'politicalStatus', 'ethnicity', 'hometown', 'currentAddress', 'selfEvaluation',
+    'age', 'portfolioUrl', 'preferredCities', 'languageSkills',
   ])) return false;
 
+  if (!validatePersonalFields(value.personal.additionalFields)) return false;
   if (!validateOptionalObjectArray(value.education, [
     'id', 'school', 'college', 'educationType', 'major', 'majorCategory', 'degree', 'academicDegree',
     'startDate', 'endDate', 'gpa', 'ranking',

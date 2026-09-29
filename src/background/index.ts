@@ -1,7 +1,7 @@
 import { createProfileImportDraft } from '../autofill/profileImport.ts';
 import { bridgeFillPage } from './fillPageBridge.ts';
 import { beginFillSession, decideFillFields, endFillSession, getCorrections, changeCorrection, getExperiences, saveExperiences, changeExperience, isPageOrigin } from './fillSessions.ts';
-import { createProfileSnapshot, saveConfirmedFact } from '../autofill/profileSnapshot.ts';
+import { createProfileSnapshot, saveConfirmedFact, savePersonalField } from '../autofill/profileSnapshot.ts';
 import { validateFieldMappings, type GroundedMapping } from '../services/llm/fieldMapping.ts';
 import type {
   FocusedFieldWriteResult,
@@ -76,6 +76,7 @@ import {
 // Background Service Worker 入口
 console.log('Background service worker started');
 
+let personalFieldSaveQueue: Promise<unknown> = Promise.resolve();
 const aiFillControllers = new Map<string, AbortController>();
 const AI_FIELD_TIMEOUT_MS = 25_000;
 const RESUME_PARSE_TIMEOUT_MS = 45_000;
@@ -278,6 +279,17 @@ export async function handleMessage(
     case 'UPDATE_MEANING_CORRECTION':
       await changeCorrection(message.payload);
       return { success: true };
+    case 'SAVE_PERSONAL_FIELD': {
+      const result = personalFieldSaveQueue.then(async () => {
+        const profile = await StorageService.getUserProfile();
+        if (!profile) return { success: false, error: '请先保存个人资料' };
+        const updated = savePersonalField(profile, message.payload);
+        const result = await handleSaveUserProfile(updated);
+        return result.success ? { success: true, data: { profileVersion: createProfileSnapshot(updated).version } } : result;
+      });
+      personalFieldSaveQueue = result.catch(() => {});
+      return result;
+    }
     case 'SAVE_ADDITIONAL_FACT': {
       const profile = await StorageService.getUserProfile();
       if (!profile || createProfileSnapshot(profile).version !== message.payload.profileVersion) return { success: false, error: '资料已更新，请重新打开资料后保存' };

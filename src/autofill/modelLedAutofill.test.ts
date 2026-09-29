@@ -1,9 +1,12 @@
+import { getPersonalAdditionalFields, matchSupplementDefinition } from '../shared/personalFields.ts';
+import { createBackupDocument, parseAndValidateBackup, serializeBackup } from '../shared/backup.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import { createProfileSnapshot } from './profileSnapshot.ts';
+import { createProfileSnapshot, savePersonalField } from './profileSnapshot.ts';
 import { createFieldRegistry, registryVersion, meaningCandidates } from './fieldRegistry.ts';
 import { validateDecision, validateModule } from './decisionValidation.ts';
+import { buildRuleDecisions, profileForRuleBinding } from './ruleDecisions.ts';
 import { FillSessionController } from './fillSessionController.ts';
 import { LLMDecisionProvider } from './decisionProvider.ts';
 import { createProfileImportDraft, applyProfileImportDraft } from './profileImport.ts';
@@ -91,11 +94,11 @@ function harness(fields: FieldObservation[] = [field()]) {
   const controller = new FillSessionController(context, ports);
   return { controller, ports, calls, writes, observe: (fields: FieldObservation[]) => { observations = fields; } };
 }
-test('every known and unknown field reaches the model before executing', async () => {
+test('fields without a confident rule still reach the model', async () => {
   const h = harness([field('known'), field('unknown', { candidates: ['unknown'] })]);
   await h.controller.run(); assert.deepEqual(h.calls, [['known', 'unknown']]); assert.equal(h.writes.length, 2); assert.equal(h.controller.counts.verified, 2);
 });
-test('model outage produces todos, never rule or cache writes', async () => {
+test('model outage leaves unmatched fields as todos', async () => {
   const h = harness(); h.ports.decide = async () => { throw new Error('暂时无法连接填写服务'); };
   await h.controller.run(); assert.equal(h.writes.length, 0); assert.equal(h.controller.counts.todo, 1); assert.match(h.controller.error, /暂时无法连接/);
 });
@@ -106,6 +109,8 @@ test('stop while awaiting model prevents subsequent execution', async () => {
 test('changed target is reobserved and reviewed by model before a write', async () => {
   const h = harness(); let calls = 0;
   h.ports.decide = async fields => { calls++; if (calls === 1) h.observe([field('name', { snapshotVersion: 'v2' })]); return fields.map(target => decision(target)); };
+  const originalExecute = h.ports.execute;
+  h.ports.execute = async (...args) => args[0].snapshotVersion === 'v1' ? { status: 'stale', reason: '目标版本已变化' } as any : originalExecute(...args);
   await h.controller.run(); assert.equal(calls, 2); assert.equal(h.writes.length, 1);
 });
 test('unchanged options do not cause repeated model calls or retries', async () => {
@@ -131,7 +136,7 @@ test('provider discards generated values and stamps trusted model and profile ve
   const [result] = await provider.decide(request(), new AbortController().signal);
   assert(!('value' in result)); assert.equal(result.modelId, 'custom:local'); assert.equal(result.profileVersion, snapshot.version);
 });
-test('production entry points have no rule filling or generated answer injections', () => {
+test('entry points share the controller and do not inject generated answers', () => {
   const entry = readFileSync(new URL('../content/index.ts', import.meta.url), 'utf8');
   assert.doesNotMatch(entry, /\.fillForm\(|prepareDynamicSections\(|injectAIButtons\(|GENERATE_ANSWER|AI_FILL_SECTION/);
   assert.match(entry, /FillSessionController/);
@@ -180,11 +185,145 @@ test('expired additional facts request confirmation instead of being used silent
 test('an unknown date endpoint prevents its partner from being counted as complete', async () => {
   const fields = [field('start', { dateGroupId: 'range' }), field('end', { dateGroupId: 'range' })]; const h = harness(fields);
   h.ports.decide = async fields => fields.map(target => target.fieldId === 'start' ? decision(target, 'education.startDate', 'edu1') : decision(target, 'personal.name', undefined, { nextAction: 'requestMeaning', meaningId: undefined, factId: undefined }));
-  await h.controller.run(); assert.equal(h.controller.counts.verified, 0); assert.equal(h.controller.counts.todo, 2);
+  await h.controller.run(); assert.equal(h.controller.counts.verified, 0); assert.equal(h.controller.counts.todo, 1); assert.equal(h.controller.counts.missing, 1);
 });
 test('preserved conflicting upstream values do not satisfy a planned dependency', async () => {
-  const h = harness([field('upstream', { currentValue: '用户值' }), field('child')]);
+  const h = harness([field('upstream'), field('child')]);
   h.ports.decide = async fields => fields.map(target => decision(target, 'personal.name', undefined, { dependencyIds: target.fieldId === 'child' ? ['upstream'] : [] }));
   h.ports.execute = async target => { h.writes.push(target.fieldId); return { status: 'skipped-existing', reason: '保留' } as any; };
   await h.controller.run(); assert.deepEqual(h.writes, ['upstream']); assert.equal(h.controller.counts.existing, 1); assert.equal(h.controller.counts.todo, 1);
 });
+
+
+test('confident rules fill all modules before any slow model request', async () => {
+  const known = field('known', { groupId: 'last', ruleBinding: { meaningId: 'personal.name', confidence: 0.98 } });
+  const h = harness([field('unknown', { groupId: 'first' }), known]);
+  h.ports.decide = async fields => { assert.deepEqual(h.writes, ['known:小王']); h.calls.push(fields.map(field => field.fieldId)); return fields.map(target => decision(target)); };
+  await h.controller.run(); assert.deepEqual(h.calls, [['unknown']]); assert.equal(h.controller.counts.verified, 2);
+});
+test('known fields require zero model requests, including when no model is configured', async () => {
+  const h = harness([field('name', { ruleBinding: { meaningId: 'personal.name', confidence: 0.98 } })]);
+  h.controller.context.modelAvailable = false;
+  try { await h.controller.run(); assert.deepEqual(h.calls, []); assert.equal(h.controller.counts.verified, 1); }
+  finally { delete h.controller.context.modelAvailable; }
+});
+test('model failure in one module does not prevent a later module from filling', async () => {
+  const h = harness([field('first', { groupId: 'a' }), field('second', { groupId: 'b' })]);
+  h.ports.decide = async fields => { h.calls.push(fields.map(field => field.fieldId)); if (fields[0].fieldId === 'first') throw new Error('请求超时'); return fields.map(target => decision(target)); };
+  await h.controller.run(); assert.deepEqual(h.writes, ['second:小王']); assert.equal(h.controller.counts.todo, 1); assert.equal(h.controller.counts.verified, 1);
+});
+test('rule failures reach model fallback with the remaining fields only', async () => {
+  const h = harness([field('known', { ruleBinding: { meaningId: 'personal.name', confidence: 0.98 } }), field('unknown')]);
+  await h.controller.run(); assert.deepEqual(h.calls, [['unknown']]);
+});
+test('rules do not invent facts, use low-confidence matches, or ignore corrections', () => {
+  const target = field('name', { ruleBinding: { meaningId: 'personal.name', confidence: 0.6 } });
+  assert.equal(buildRuleDecisions([target], context).length, 0);
+  target.ruleBinding!.confidence = 0.98;
+  const correction = { id: 'c', origin: 'https://site.test', signature: target.signature, meaningId: 'personal.phone', enabled: true, confirmedAt: 'now', profileVersion: context.profile.version, registryVersion: context.registryVersion };
+  assert.equal(buildRuleDecisions([target], context, [correction]).length, 0);
+  assert.equal(profileForRuleBinding(snapshot).education[1].school, '乙大学');
+});
+test('failed rule operation reaches model and a different option plan can recover it', async () => {
+  const target = field('choice', { kind: 'select', options: [{ id: 'option-name', label: '小王' }], ruleBinding: { meaningId: 'personal.name', confidence: 0.98 } });
+  const h = harness([target]);
+  h.ports.execute = async (field, plan, value) => {
+    h.writes.push(field.fieldId + ':' + plan.nextAction);
+    return plan.modelId === 'local-rules-v1' ? { status: 'needs-mapping', reason: '请确认网站选项' } as any : { status: 'verified', reason: value };
+  };
+  h.ports.decide = async fields => { h.calls.push(fields.map(field => field.fieldId)); return fields.map(field => decision(field, 'personal.name', undefined, { nextAction: 'select', targetOptionIds: ['option-name'] })); };
+  await h.controller.run(); assert.deepEqual(h.calls, [['choice']]); assert.deepEqual(h.writes, ['choice:write', 'choice:select']); assert.equal(h.controller.counts.verified, 1);
+});
+
+
+test('age, portfolio, preferred cities and languages save under personal and fill without a website key', async () => {
+  let updated = profile;
+  const values = [['年龄', '26', 'age'], ['作品集链接', 'https://portfolio.example/me', 'portfolioUrl'], ['意向城市', '上海', 'preferredCities'], ['外语能力', '英语 CET-6', 'languageSkills']];
+  for (const [label, value] of values) updated = savePersonalField(updated, { label, value, expectedValue: '' });
+  for (const [, value, key] of values) assert.equal((updated.personal as any)[key], value);
+  assert(!JSON.stringify(updated.personal).includes('origin'));
+  const expanded = createFieldRegistry(getPersonalAdditionalFields(updated));
+  const facts = createProfileSnapshot(updated);
+  const ctx = { ...context, registry: expanded, registryVersion: registryVersion(expanded), profile: facts };
+  for (const origin of ['https://a.test', 'https://b.test']) {
+    const fields = values.map(([label, , key]) => field(key, { label, origin, ruleBinding: { meaningId: matchSupplementDefinition(label, expanded)!.id, confidence: 1 } }));
+    assert.equal(buildRuleDecisions(fields, ctx).length, 4);
+  }
+});
+test('arbitrary personal answers are reusable globally and repeated saves update the same field', () => {
+  const first = savePersonalField(profile, { label: '推荐方式*', value: '内推', expectedValue: '' });
+  assert.equal(first.personal.additionalFields?.length, 1);
+  assert.equal(first.personal.additionalFields?.[0].label, '推荐方式');
+  const second = savePersonalField(first, { label: '推荐方式', value: '校友推荐', expectedValue: '内推' });
+  assert.equal(second.personal.additionalFields?.length, 1);
+  assert.equal(second.personal.additionalFields?.[0].id, first.personal.additionalFields?.[0].id);
+  const registry = createFieldRegistry(getPersonalAdditionalFields(second));
+  const match = matchSupplementDefinition('推荐方式：', registry)!;
+  const facts = createProfileSnapshot(second);
+  const plans = buildRuleDecisions([field('referral', { origin: 'https://another.test', ruleBinding: { meaningId: match.id, confidence: 1 } })], { ...context, registry, registryVersion: registryVersion(registry), profile: facts });
+  assert.equal(plans.length, 1);
+  assert.equal(facts.facts.find(fact => fact.id === plans[0].factId)?.value, '校友推荐');
+});
+test('missing known personal information stays blank without a model call or a blocking todo', async () => {
+  const h = harness([field('age', { ruleBinding: { meaningId: 'personal.age', confidence: 1 } }), field('name', { ruleBinding: { meaningId: 'personal.name', confidence: 1 } })]);
+  await h.controller.run(); assert.deepEqual(h.calls, []); assert.equal(h.controller.counts.verified, 1); assert.equal(h.controller.counts.todo, 0); assert.equal(h.controller.counts.missing, 1);
+});
+test('model request for an absent answer becomes optional personal supplementation', async () => {
+  const h = harness(); h.ports.decide = async fields => fields.map(target => decision(target, 'personal.name', undefined, { nextAction: 'requestFact', factId: undefined, meaningId: undefined }));
+  await h.controller.run(); assert.equal(h.writes.length, 0); assert.equal(h.controller.counts.todo, 0); assert.equal(h.controller.counts.missing, 1);
+});
+test('saving another personal field does not conflict, but concurrent edits to the same answer do', () => {
+  const first = savePersonalField(profile, { label: '年龄', value: '26', expectedValue: '' });
+  const second = savePersonalField(first, { label: '作品链接', value: 'https://example.test', expectedValue: '' });
+  assert.equal(second.personal.age, '26');
+  assert.throws(() => savePersonalField(second, { label: '年龄', value: '27', expectedValue: '' }), /已更新/);
+});
+test('old global additional and custom answers remain available to new personal definitions', () => {
+  const old = { ...profile, additionalFacts: [{ id: 'city', meaningId: 'old-city', label: '期望城市', subject: 'self', value: '杭州', valueType: 'text' as const, updatedAt: 'now' }], customInformation: [{ id: 'lang', name: '语言能力', content: '英语' }] };
+  const facts = createProfileSnapshot(old).facts;
+  assert.equal(facts.find(fact => fact.meaningId === 'personal.preferredCities')?.value, '杭州');
+  assert.equal(facts.find(fact => fact.meaningId === 'personal.languageSkills')?.value, '英语');
+});
+test('personal supplementation survives backup round trips and rejects invalid nested data', () => {
+  const updated = savePersonalField(savePersonalField(profile, { label: '年龄', value: '26' }), { label: '其他作品', value: '地址' });
+  const document = createBackupDocument({ userProfile: updated, settings: null, llmConfig: null }, '1.3.1');
+  const restored = parseAndValidateBackup(serializeBackup(document));
+  assert(restored.success);
+  assert.equal(restored.document.data.userProfile?.personal.age, '26');
+  assert.equal(restored.document.data.userProfile?.personal.additionalFields?.[0].value, '地址');
+  (document.data.userProfile!.personal as any).additionalFields = [{ value: 123 }];
+  assert.equal(parseAndValidateBackup(JSON.stringify(document)).success, false);
+});
+test('task panel has no persistent website meaning action and exposes personal saving', () => {
+  const panel = readFileSync(new URL('../content/fillTaskPanel.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(panel, /记住本网站|SAVE_MEANING_CORRECTION/);
+  assert.match(panel, /SAVE_PERSONAL_FIELD/);
+  const entry = readFileSync(new URL('../content/index.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(entry, /SAVE_CONTROL_EXPERIENCES/);
+});
+test('updated or explicitly cleared personal values supersede legacy aliases', () => {
+  const old = { ...profile, personal: { ...profile.personal, preferredCities: '上海' }, customInformation: [{ id: 'old', name: '期望城市', content: '杭州' }] };
+  assert(!createProfileSnapshot(old).facts.some(fact => fact.value === '杭州'));
+  const cleared = { ...old, personal: { ...old.personal, preferredCities: '' } };
+  assert(!createProfileSnapshot(cleared).facts.some(fact => fact.meaningId === 'personal.preferredCities' || fact.value === '杭州'));
+});
+test('task panel implements refill experience design with two-section list, single editor, batch supplement and mini bar', () => {
+  const panel = readFileSync(new URL('../content/fillTaskPanel.ts', import.meta.url), 'utf8');
+  assert.match(panel, /网页待处理/);
+  assert.match(panel, /可补充资料/);
+  assert.match(panel, /一起补充/);
+  assert.match(panel, /去处理/);
+  assert.match(panel, /补全日期/);
+  assert.match(panel, /两处都用/);
+  assert.match(panel, /当前网页/);
+  assert.match(panel, /个人资料/);
+  assert.match(panel, /保存并填入/);
+  assert.match(panel, /去网页选择/);
+  assert.match(panel, /我已选好，检查/);
+  assert.match(panel, /撤销这次资料更新/);
+  assert.match(panel, /撤销本次填写/);
+  assert.match(panel, /集中完善个人资料/);
+  assert.match(panel, /SAVE_PERSONAL_FIELD/);
+  assert.match(panel, /SAVE_ADDITIONAL_FACT/);
+});
+

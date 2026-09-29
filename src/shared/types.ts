@@ -21,6 +21,11 @@ export interface CustomInformation {
 }
 
 export interface PersonalInfo {
+  age?: string;
+  portfolioUrl?: string;
+  preferredCities?: string;
+  languageSkills?: string;
+  additionalFields?: AdditionalFact[];
   name: string;
   gender: string;
   birthDate: string;
@@ -322,6 +327,7 @@ export type Message =
   | { type: 'UPDATE_CONTROL_EXPERIENCE'; payload: { id: string; enabled?: boolean; remove?: boolean } }
   | { type: 'GET_MEANING_CORRECTIONS'; payload?: null }
   | { type: 'UPDATE_MEANING_CORRECTION'; payload: { id: string; enabled?: boolean; remove?: boolean } }
+  | { type: 'SAVE_PERSONAL_FIELD'; payload: { label: string; value: string; valueType?: 'text' | 'date'; expectedValue?: string } }
   | { type: 'SAVE_ADDITIONAL_FACT'; payload: { fact: AdditionalFact; profileVersion: string } }
   | { type: 'START_FILL_SESSION'; payload: { sourceId: string; attachmentId?: string | null; region?: boolean } }
   | { type: 'OPEN_PROFILE_SETTINGS'; payload?: null }

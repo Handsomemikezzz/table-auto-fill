@@ -1,3 +1,4 @@
+import { getPersonalAdditionalFields } from './personalFields.ts';
 import type {
   BackupData,
   SettingsData,
@@ -25,6 +26,7 @@ export function normalizeUserProfile(profile: UserProfile): UserProfile {
     ...profile,
     personal: {
       ...(profile.personal || {}),
+      ...(profile.personal?.additionalFields || profile.additionalFacts ? { additionalFields: getPersonalAdditionalFields(profile) } : {}),
       ...(profile.personal?.politicalStatus
         ? { politicalStatus: normalizePoliticalStatusValue(profile.personal.politicalStatus) }
         : {}),

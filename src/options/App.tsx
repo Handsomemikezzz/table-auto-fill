@@ -1,5 +1,5 @@
 import { AdditionalFactsSection } from './AdditionalFactsSection.tsx';
-import { LearningRecords } from './LearningRecords.tsx';
+import { getPersonalAdditionalFields, PERSONAL_EXTRA_FIELDS } from '../shared/personalFields.ts';
 import { ProfileImportDraft } from './ProfileImportDraft.tsx';
 import { applyProfileImportDraft, type ProfileImportChange } from '../autofill/profileImport.ts';
 import React, { useState, useEffect } from 'react';
@@ -653,6 +653,14 @@ function App() {
                 />
               </div>
 
+              <h3>补充个人资料（选填）</h3>
+              <p>填写后可在不同招聘页面自动使用；没有的信息保持空白即可。</p>
+              {PERSONAL_EXTRA_FIELDS.map(field => <div key={field.key} style={styles.formGroup}>
+                <label style={styles.label} htmlFor={`personal-${field.key}`}>{field.label}</label>
+                <input id={`personal-${field.key}`} value={profile.personal[field.key] || ''} onChange={event => handlePersonalChange(field.key, event.target.value)} style={styles.input} placeholder={`选填${field.label}`} />
+              </div>)}
+              <AdditionalFactsSection facts={getPersonalAdditionalFields(profile)} onChange={additionalFields => setProfile({ ...profile, personal: { ...profile.personal, additionalFields } })} />
+
               <div className="info-note">
                 提示：带 * 的为必填项。你也可以通过上传简历来快速填充这些信息。
                 身份证号仅保存在本地浏览器中，不会上传到任何服务器。
@@ -682,7 +690,6 @@ function App() {
             </div>
           )}
 
-          {activeTab === 'custom' && <><AdditionalFactsSection facts={profile.additionalFacts || []} onChange={additionalFacts => setProfile({ ...profile, additionalFacts })} /><LearningRecords /></>}
           {activeTab === 'custom' && (
             <div className="options-form">
               <div className="custom-information-header">

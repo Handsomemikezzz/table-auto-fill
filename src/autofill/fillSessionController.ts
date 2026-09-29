@@ -1,3 +1,4 @@
+import { buildRuleDecisions } from './ruleDecisions.ts';
 import type { FillContextData, FieldObservation, FieldDecision, SessionItem, SessionPhase, MeaningCorrection } from './contracts.ts';
 import { versionOf } from './contracts.ts';
 import type { FillOutcome } from '../shared/fillModel.ts';
@@ -21,10 +22,10 @@ export class FillSessionController {
   busy = false;
   error = '';
   corrections: MeaningCorrection[] = [];
-  constructor(context: FillContextData, ports: FillSessionPorts) { this.context = context; this.ports = ports; }
+  constructor(context: FillContextData, ports: FillSessionPorts) { this.context = context; this.ports = ports; this.corrections = context.corrections || []; }
   stop() { this.stopped = true; this.phase = 'stopped'; this.ports.cancel(); this.ports.update(); }
   get counts() {
-    return { verified: this.items.filter(item => item.status === 'verified').length, assisted: this.items.filter(item => item.status === 'assisted').length, skipped: this.items.filter(item => item.status === 'skipped').length, existing: this.items.filter(item => item.status === 'existing').length, todo: this.items.filter(item => item.status === 'todo' || item.status === 'pending').length };
+    return { verified: this.items.filter(item => item.status === 'verified').length, assisted: this.items.filter(item => item.status === 'assisted').length, skipped: this.items.filter(item => item.status === 'skipped').length, existing: this.items.filter(item => item.status === 'existing').length, missing: this.items.filter(item => item.status === 'missing').length, todo: this.items.filter(item => item.status === 'todo' || item.status === 'pending').length };
   }
   private canContinue = () => !this.stopped;
   private fact(decision?: FieldDecision) { return this.context.profile.facts.find(fact => fact.id === decision?.factId); }
@@ -34,11 +35,24 @@ export class FillSessionController {
     try {
       this.items = (await this.ports.observe()).map(observation => ({ observation, status: 'pending', reason: '', attemptedPlans: [] }));
       this.ports.update();
+      // Finish reliable local matches across the entire page before waiting on any model.
+      for (const groupId of new Set(this.items.map(item => item.observation.groupId))) {
+        if (this.stopped) break;
+        await this.runGroup(groupId, true);
+      }
+      for (const item of this.items) if (item.status === 'todo' && !['user-edited', 'cancelled', 'skipped-existing'].includes(item.outcome?.status || '')) item.status = 'pending';
       let discoveries = 0;
       while (!this.stopped) {
         const next = this.items.find(item => item.status === 'pending');
         if (!next) break;
-        await this.runGroup(next.observation.groupId);
+        try { await this.runGroup(next.observation.groupId); }
+        catch (error) {
+          if (this.stopped) break;
+          const reason = error instanceof Error ? error.message : '该模块暂时无法匹配';
+          this.error = `部分字段匹配失败，其他字段继续填写：${reason}`;
+          for (const item of this.items.filter(item => item.observation.groupId === next.observation.groupId && item.status === 'pending')) this.fail(item, { status: 'failed', reason });
+          this.ports.update();
+        }
         if (this.stopped) break;
         const observed = await this.ports.observe();
         const newFields = observed.filter(field => !this.items.some(item => item.observation.fieldId === field.fieldId));
@@ -54,7 +68,10 @@ export class FillSessionController {
           const current = observed.find(field => field.fieldId === item.observation.fieldId);
           if (current && current.snapshotVersion !== item.observation.snapshotVersion) { item.observation = current; item.status = 'pending'; }
         }
-        if (newFields.length) discoveries++;
+        if (newFields.length) {
+          discoveries++;
+          for (const groupId of new Set(newFields.map(field => field.groupId))) { if (!this.stopped) await this.runGroup(groupId, true); }
+        }
       }
       // Verify again after dependency and framework updates have settled.
       for (const item of this.items) {
@@ -69,20 +86,27 @@ export class FillSessionController {
       for (const item of this.items.filter(item => item.status === 'pending')) { item.status = 'todo'; item.reason = this.error; }
     } finally { this.busy = false; this.phase = this.stopped ? 'stopped' : 'complete'; this.ports.update(); }
   }
+  private leaveEmpty(item: SessionItem) {
+    item.status = 'missing'; item.reason = '未找到对应资料，已留空。可按需补充个人资料。'; item.outcome = { status: 'needs-data', reason: item.reason };
+  }
   private fail(item: SessionItem, result: FillOutcome) {
     item.outcome = result; item.status = 'todo'; item.reason = result.reason;
   }
-  private async runGroup(groupId: string) {
-    const group = this.items.filter(item => item.observation.groupId === groupId && !['verified', 'assisted', 'skipped', 'existing'].includes(item.status));
+  private async runGroup(groupId: string, rulesOnly = false) {
+    const group = this.items.filter(item => item.observation.groupId === groupId && !['verified', 'assisted', 'skipped', 'existing', 'missing'].includes(item.status));
     const evidence = new Map<string, string[]>();
     let previousSnapshot = '';
     for (let round = 0; round < 3 && !this.stopped; round++) {
       const observations = await this.ports.observe();
-      const fields: FieldObservation[] = [];
-      for (const item of group.filter(item => !['verified', 'assisted', 'existing', 'skipped'].includes(item.status))) {
+      let fields: FieldObservation[] = [];
+      for (const item of group.filter(item => !['verified', 'assisted', 'existing', 'skipped', 'missing'].includes(item.status))) {
         const current = observations.find(field => field.fieldId === item.observation.fieldId);
         if (!current) { this.fail(item, { status: 'stale', reason: '字段已被页面替换，请重新开始识别该区域' }); continue; }
         item.observation = current;
+        if (!rulesOnly && current.currentValue && item.outcome && ['unverified', 'rejected', 'failed'].includes(item.outcome.status)) { item.status = 'todo'; continue; }
+        if (!rulesOnly && current.currentValue) { item.status = 'existing'; item.reason = '已保留网页现有答案'; continue; }
+        if (current.disabled || current.kind === 'unsupported') { this.fail(item, { status: 'unsupported', reason: '此控件当前不可自动操作，其他项目继续填写' }); continue; }
+        if (current.ruleBinding && !current.currentValue && !this.context.profile.facts.some(fact => fact.meaningId === current.ruleBinding!.meaningId && fact.recordId === current.ruleBinding!.recordId)) { this.leaveEmpty(item); continue; }
         fields.push({ ...current, evidence: evidence.get(current.fieldId) || current.evidence });
       }
       for (let i = fields.length - 1; i >= 0; i--) if ((group.find(item => item.observation.fieldId === fields[i].fieldId)?.decisionAttempts || 0) >= 3) fields.splice(i, 1);
@@ -91,9 +115,17 @@ export class FillSessionController {
       if (previousSnapshot === fingerprint) break;
       previousSnapshot = fingerprint;
       if (this.stopped) break;
-      this.phase = 'matching'; this.ports.update();
-      for (const field of fields) { const item = group.find(item => item.observation.fieldId === field.fieldId)!; item.decisionAttempts = (item.decisionAttempts || 0) + 1; }
-      const decisions = await this.ports.decide(fields, this.corrections);
+      this.phase = rulesOnly ? 'rules' : 'matching'; this.ports.update();
+      if (!rulesOnly) for (const field of fields) { const item = group.find(item => item.observation.fieldId === field.fieldId)!; item.decisionAttempts = (item.decisionAttempts || 0) + 1; }
+      let decisions: FieldDecision[];
+      if (rulesOnly) {
+        decisions = buildRuleDecisions(fields, this.context, this.corrections);
+        fields = fields.filter(field => decisions.some(decision => decision.fieldId === field.fieldId));
+        if (!fields.length) break;
+      } else if (this.context.modelAvailable === false) {
+        for (const field of fields) this.leaveEmpty(group.find(item => item.observation.fieldId === field.fieldId)!);
+        break;
+      } else decisions = await this.ports.decide(fields, this.corrections);
       if (this.stopped) break;
       const request = { fields, profile: this.context.profile, registry: this.context.registry, registryVersion: this.context.registryVersion, corrections: this.corrections };
       const errors = validateModule(decisions, request);
@@ -115,13 +147,10 @@ export class FillSessionController {
         if (decision.dependencyIds.some(id => !this.items.some(item => item.observation.fieldId === id && (['verified', 'assisted'].includes(item.status) || (item.status === 'existing' && item.outcome?.status === 'unchanged'))))) {
           this.fail(item, { status: 'needs-mapping', reason: '上游字段尚未完成，请先处理关联字段' }); continue;
         }
-        const current = (await this.ports.observe()).find(current => current.fieldId === field.fieldId);
-        if (!current || current.snapshotVersion !== field.snapshotVersion) {
-          this.fail(item, { status: 'stale', reason: '字段已更新，正在重新识别' }); recovery = true; continue;
-        }
         if (!['write', 'select', 'readOptions'].includes(decision.nextAction) && field.currentValue) { item.status = 'existing'; item.reason = '已保留网页现有答案'; continue; }
+        if (decision.nextAction === 'requestFact' || (decision.nextAction === 'requestMeaning' && !fact && !this.context.profile.facts.some(fact => fact.meaningId === decision.meaningId))) { this.leaveEmpty(item); continue; }
         if (!['write', 'select', 'readOptions'].includes(decision.nextAction)) {
-          this.fail(item, { status: decision.nextAction === 'requestFact' ? 'needs-data' : 'needs-mapping', reason: decision.uncertaintyReason || '请确认此字段的含义或对应经历' }); continue;
+          this.fail(item, { status: 'needs-mapping', reason: decision.uncertaintyReason || '请确认此字段的含义或对应经历' }); continue;
         }
         const plan = versionOf({ action: decision.nextAction, fact: decision.factId, options: decision.targetOptionIds, snapshot: field.snapshotVersion });
         if (item.attemptedPlans.includes(plan)) { this.fail(item, { status: 'unsupported', reason: '已尝试此操作，请在网页中完成后检查' }); continue; }
@@ -141,7 +170,7 @@ export class FillSessionController {
             this.fail(item, result);
             const refreshed = (await this.ports.observe()).find(current => current.fieldId === field.fieldId);
             // Only changed evidence earns another model call; visible values are rechecked by the user.
-            if (!result.observedValue && refreshed && refreshed.snapshotVersion !== field.snapshotVersion && !['user-edited', 'cancelled'].includes(result.status)) recovery = true;
+            if ((result.status === 'stale' || !result.observedValue) && refreshed && refreshed.snapshotVersion !== field.snapshotVersion && !['user-edited', 'cancelled'].includes(result.status)) recovery = true;
           }
         }
         evidence.set(field.fieldId, [`动作=${decision.nextAction}`, `结果=${item.outcome?.status || item.status}`, `原因=${item.reason}`]);
@@ -149,7 +178,7 @@ export class FillSessionController {
       }
       if (!recovery) break;
     }
-    group.filter(item => item.status === 'pending').forEach(item => this.fail(item, { status: 'needs-mapping', reason: '需要在网页中处理' }));
+    if (!rulesOnly) group.filter(item => item.status === 'pending').forEach(item => this.fail(item, { status: 'needs-mapping', reason: '需要在网页中处理' }));
   }
   private checkDateGroups() {
     for (const item of this.items.filter(item => item.status === 'verified' && (item.observation.dateGroupId || /\.(startDate|endDate)$/.test(item.decision?.meaningId || '')))) {
@@ -158,10 +187,10 @@ export class FillSessionController {
     }
   }
   async recheck(item: SessionItem) {
-    if (this.busy || this.stopped || !item.decision || !this.fact(item.decision)) return;
+    if (this.busy || !item.decision || !this.fact(item.decision)) return;
     this.busy = true; this.ports.update();
     try {
-      const result = await this.ports.verify(item.observation, item.decision, this.fact(item.decision)!.value, this.canContinue);
+      const result = await this.ports.verify(item.observation, item.decision, this.fact(item.decision)!.value, () => true);
       if (result.status === 'verified' || result.status === 'unchanged') { item.status = 'assisted'; item.reason = '人工处理后已检查'; item.outcome = result; }
       else this.fail(item, result);
     } finally { this.busy = false; this.ports.update(); }
@@ -178,12 +207,12 @@ export class FillSessionController {
   }
   skip(item: SessionItem) { if (!this.busy) { item.status = 'skipped'; item.reason = '本次跳过'; this.ports.update(); } }
   async manual(item: SessionItem, value: string, optionId?: string) {
-    if (this.busy || this.stopped) return;
+    if (this.busy) return;
     this.busy = true; this.ports.update();
     try {
       // Explicit field-level user selection is an assisted action, never a learned semantic binding.
       const decision = { ...item.decision, targetOptionIds: optionId ? [optionId] : undefined, meaningId: item.decision?.meaningId } as FieldDecision;
-      const result = await this.ports.execute(item.observation, decision, value, this.canContinue, true);
+      const result = await this.ports.execute(item.observation, decision, value, () => true, true);
       item.outcome = result;
       if (result.status === 'verified' || result.status === 'unchanged') { item.status = 'assisted'; item.reason = '用户明确填写'; }
       else this.fail(item, result);

@@ -1,43 +1,69 @@
+import { matchSupplementDefinition } from '../shared/personalFields.ts';
+import { meaningForRule, profileForRuleBinding } from '../autofill/ruleDecisions.ts';
+import type { ProfileSnapshot } from '../autofill/contracts.ts';
+import type { DetectedField } from '../shared/types.ts';
 import { discoverControls, observeControl, getControlIdentity, getOptions, getEditableElement, getAssociatedPopups, bindAssociatedPopup, isVisibleControl, KNOWN_POPUP_SELECTOR, KNOWN_COMBOBOX_SELECTOR } from './controlObservation.ts';
 import { FieldMatcher } from '../utils/fieldMatcher.ts';
 import { findFormSectionHeading } from '../utils/formContext.ts';
-import { dateRangePart } from './fieldBinding.ts';
+import { dateRangePart, bindFieldRecords, type RecordBinding } from './fieldBinding.ts';
 import { meaningCandidates } from '../autofill/fieldRegistry.ts';
 import { versionOf, type FieldDefinition, type FieldObservation } from '../autofill/contracts.ts';
 
-export function createPageObserver(registry: FieldDefinition[], region?: DOMRect) {
+export function createPageObserver(registry: FieldDefinition[], region?: DOMRect, profile?: ProfileSnapshot) {
+  type CachedInfo = { observation: ReturnType<typeof observeControl>; identifiers: ReturnType<typeof FieldMatcher.extractIdentifiers>; label: string; endpoint: ReturnType<typeof dateRangePart>; match: ReturnType<typeof FieldMatcher.matchFieldType> };
+  let lastControls: HTMLElement[] = [];
+  const cachedInfo = new Map<HTMLElement, CachedInfo>();
   const nodes = new Map<string, HTMLElement>();
   const groupNodes = new Map<string, HTMLElement>();
-  function observe(): FieldObservation[] {
-    const controls = [...discoverControls(document), ...Array.from(document.querySelectorAll<HTMLInputElement>('input[type="file"]')).filter(element => !element.closest('[data-job-applymate-ui]'))].filter(element => {
+  function observe(targetId?: string): FieldObservation[] {
+    const controls = (targetId ? lastControls.filter(element => element.isConnected) : [...discoverControls(document), ...Array.from(document.querySelectorAll<HTMLInputElement>('input[type="file"]')).filter(element => !element.closest('[data-job-applymate-ui]'))]).filter(element => {
       if (!region) return true;
       const rect = element.getBoundingClientRect();
       return rect.left < region.right && rect.right > region.left && rect.top < region.bottom && rect.bottom > region.top;
     });
-    return controls.map(element => {
+    if (!targetId) lastControls = controls;
+    // Read each control once per scan. Reuse identifiers and group structure below.
+    const info = new Map(controls.map(element => {
+      if (targetId && getControlIdentity(element) !== targetId && cachedInfo.has(element)) return [element, cachedInfo.get(element)!] as const;
       const observation = observeControl(element);
       const identifiers = FieldMatcher.extractIdentifiers(element);
-      const group = findGroup(element, controls);
+      const endpoint = dateRangePart(element);
+      const label = endpoint ? `起止时间（${endpoint === 'start' ? '开始' : '结束'}）` : ['radio', 'checkbox'].includes(observation.kind) ? observation.label : identifiers.labelText || observation.label || identifiers.placeholder || identifiers.name || '未命名字段';
+      const match = FieldMatcher.matchFieldType(identifiers.name, identifiers.id, identifiers.placeholder, label, identifiers.type, identifiers.autocomplete, identifiers.contextText);
+      const data = { observation, identifiers, label, endpoint, match };
+      cachedInfo.set(element, data);
+      return [element, data] as const;
+    }));
+    const detected: DetectedField[] = controls.flatMap(element => { const data = info.get(element)!; return data.match.confidence >= 0.9 ? [{ element, label: data.label, fieldType: data.match.fieldType, confidence: data.match.confidence }] : []; });
+    const bindings = profile ? bindFieldRecords(detected, profileForRuleBinding(profile)) : new Map<HTMLElement, RecordBinding>();
+    const shapes = new Map<HTMLElement, unknown>();
+    return controls.filter(element => !targetId || getControlIdentity(element) === targetId).map(element => {
+      const { observation, identifiers, label, endpoint, match } = info.get(element)!;
+      const binding = bindings.get(element);
+      const group = binding?.container || findGroup(element, controls);
       const fieldId = getControlIdentity(element);
       const groupId = getControlIdentity(group);
       nodes.set(fieldId, element); groupNodes.set(groupId, group);
-      const endpoint = dateRangePart(element);
       let dateGroupId: string | undefined;
       if (endpoint) for (let parent = element.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
         if (controls.filter(control => parent.contains(control)).length === 2) { dateGroupId = getControlIdentity(parent); break; }
       }
-      const label = endpoint ? `起止时间（${endpoint === 'start' ? '开始' : '结束'}）` : ['radio', 'checkbox'].includes(observation.kind) ? observation.label : identifiers.labelText || observation.label || identifiers.placeholder || identifiers.name || '未命名字段';
-      const groupLabel = findFormSectionHeading(element) || group.querySelector('legend,h2,h3,h4')?.textContent?.trim().slice(0, 100) || '当前表单';
+      const groupLabel = findFormSectionHeading(element) || Array.from(group.children).find(child => child.matches('legend,h2,h3,h4,[role=heading]'))?.textContent?.trim().slice(0, 100) || '当前表单';
       const protectedControl = element.getAttribute('autocomplete') === 'one-time-code' || /验证码|短信验证|captcha|verification.?code|one.?time.?password/i.test(`${label} ${identifiers.name}`);
       const options = observation.options.map(({ element: _element, ...option }) => option);
-      const shape = { structure: controls.filter(control => group.contains(control)).map(control => [control.getAttribute('name'), FieldMatcher.extractIdentifiers(control).labelText, observeControl(control).kind]), label, groupLabel, name: element.getAttribute('name'), kind: observation.kind, part: dateRangePart(element), options: options.map(({ id: _id, ...option }) => option) };
+      if (!shapes.has(group)) shapes.set(group, controls.filter(control => group.contains(control)).map(control => [control.getAttribute('name'), info.get(control)!.identifiers.labelText, info.get(control)!.observation.kind]));
+      const shape = { structure: shapes.get(group), label, groupLabel, name: element.getAttribute('name'), kind: observation.kind, part: dateRangePart(element), options: options.map(({ id: _id, ...option }) => option) };
       const signature = versionOf(shape);
+      const supplement = matchSupplementDefinition(label, registry);
+      const meaningId = supplement?.id || (element.matches('input[type=file]') ? /简历|resume|\bcv\b/i.test(label) ? 'attachment.resumeFile' : undefined : meaningForRule(match.fieldType, { registry }));
+      const needsRecord = meaningId && /^(education|experience|projects)\./.test(meaningId);
+      const ruleBinding = meaningId && (!needsRecord || binding) && !protectedControl ? { meaningId, recordId: needsRecord ? binding?.recordId : undefined, confidence: supplement ? 1 : match.confidence } : undefined;
       const data = { fieldId, origin: location.origin, frameId: location.origin + location.pathname, groupId, groupLabel, dateGroupId, signature, label,
         context: `${identifiers.contextText || ''} ${dateRangePart(element) || ''} ${element.getAttribute('placeholder') || ''}`.slice(0, 600),
         kind: protectedControl ? 'unsupported' : element.matches('input[type=file]') ? 'file' : observation.kind, required: element.hasAttribute('required') || element.getAttribute('aria-required') === 'true',
         currentValue: protectedControl ? '' : element.matches('input[type=file]') ? Array.from((element as HTMLInputElement).files || []).map(file => file.name).join(', ') : observation.value, disabled: protectedControl || observation.disabled, options,
         optionsState: observation.optionsComplete ? 'complete' as const : options.length ? 'partial' as const : 'unread' as const,
-        candidates: meaningCandidates(`${groupLabel} ${label}`, registry),
+        ruleBinding, candidates: meaningCandidates(`${groupLabel} ${label}`, registry),
       };
       return { ...data, snapshotVersion: versionOf(data) };
     });

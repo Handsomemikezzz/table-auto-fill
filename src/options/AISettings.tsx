@@ -268,7 +268,7 @@ export function AISettings({ dataRevision = 0 }: AISettingsProps) {
           placeholder="写下字段识别规则，例如：紧急联系电话属于紧急联系人，不是候选人本人电话。"
         />
         <p className="settings-hint">
-          保留用于旧版备份兼容。当前填写使用字段定义表；请在任务面板确认字段含义，在“自定义信息 → 学习记录”管理已确认纠错。
+          保留用于旧版备份兼容。当前填写使用字段定义表；请在任务面板补充资料，或在“个人基本信息”中统一维护。
           <button
             type="button"
             onClick={() => setRecognitionRules(DEFAULT_FIELD_RECOGNITION_RULES_MD)}

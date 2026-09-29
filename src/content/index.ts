@@ -1,14 +1,13 @@
 import { FormFiller } from './formFiller.ts';
 import { verifyControl, isAutomatedControlAction } from './fillEngine.ts';
 import { observeControl, discoverControls } from './controlObservation.ts';
-import { supportsCascader } from './cascaderAdapter.ts';
 import { createPageObserver, readModelOptions } from './modelLedObservation.ts';
 import { createFillTaskPanel } from './fillTaskPanel.ts';
 import { FillSessionController } from '../autofill/fillSessionController.ts';
 import { createInfoOverlayController } from './infoOverlay.ts';
 import { createProfileSnapshot } from '../autofill/profileSnapshot.ts';
 import { getResumeLibrary } from '../shared/resumes.ts';
-import type { ControlExperience, FillContextData, FieldObservation, FieldDecision } from '../autofill/contracts.ts';
+import type { FillContextData, FieldObservation, FieldDecision } from '../autofill/contracts.ts';
 import type { FillOutcome } from '../shared/fillModel.ts';
 import type { Message, MessageResponse, UserProfile, FocusedFieldWriteResult } from '../shared/types.ts';
 
@@ -72,7 +71,7 @@ async function startFill(sourceId = 'default', attachmentId?: string | null, reg
     if (!result.success || !result.data) throw new Error(result.error || '暂时无法连接填写服务');
     const context = result.data;
     session = new FillSessionController(context, {
-      observe: () => bridge<FieldObservation[]>({ action: 'observe', sessionId, registry: context.registry, region: regionData }),
+      observe: () => bridge<FieldObservation[]>({ action: 'observe', sessionId, registry: context.registry, profile: context.profile, region: regionData }),
       decide: async (fields, corrections) => {
         const response = await send<FieldDecision[]>({ type: 'DECIDE_FILL_FIELDS', payload: { sessionId, fields, corrections } });
         if (!response.success || !response.data) throw new Error(response.error || '暂时无法连接填写服务');
@@ -87,13 +86,6 @@ async function startFill(sourceId = 'default', attachmentId?: string | null, reg
     panel.bind(session);
     starting = false;
     await session.run();
-    const experiences: ControlExperience[] = session.items.filter(item => item.status === 'verified' && item.decision && ['write', 'select'].includes(item.decision.nextAction)).map(item => ({
-      id: `${location.origin}:${item.observation.frameId}:${item.observation.signature}`, origin: item.observation.origin || location.origin,
-      signature: item.observation.signature, registryVersion: context.registryVersion, profileVersion: context.profile.version,
-      adapterId: item.outcome?.adapterId || `dom-${item.observation.kind}`, action: item.decision!.nextAction as 'write' | 'select',
-      modelId: item.decision!.modelId, verifiedAt: new Date().toISOString(), enabled: true,
-    }));
-    if (experiences.length) void send({ type: 'SAVE_CONTROL_EXPERIENCES', payload: experiences });
     if (!session.items.length) panel.status('当前页面未发现可操作字段。');
   } catch (error) { panel.status(error instanceof Error ? error.message : '填写失败'); }
   finally { starting = false; }
@@ -120,7 +112,7 @@ async function localOperation(payload: Record<string, any>) {
     if (localSessionId !== payload.sessionId) {
       localSessionId = payload.sessionId; localCancelled = false; localUserEdits = new WeakSet(); formFiller.beginFillSession();
       const region = payload.region ? new DOMRect(payload.region.x, payload.region.y, payload.region.width, payload.region.height) : undefined;
-      observer = createPageObserver(payload.registry, region);
+      observer = createPageObserver(payload.registry, region, payload.profile);
     }
     const fields = observer!.observe();
     for (const element of observer!.nodes.values()) {
@@ -142,20 +134,23 @@ async function localOperation(payload: Record<string, any>) {
   if (payload.action === 'locate') { element.scrollIntoView({ block: 'center', behavior: 'smooth' }); element.focus(); return; }
   const keepGoing = () => !localCancelled && localSessionId === payload.sessionId;
   if (!keepGoing()) return { status: 'cancelled', reason: '填写已停止' };
-  if (payload.action === 'readOptions') return readModelOptions(element, payload.query, () => keepGoing() && !localUserEdits.has(element));
-  const context = { semantic: payload.decision?.meaningId, optionRefs: payload.decision?.targetOptionIds, shouldContinue: keepGoing, overwrite: payload.overwrite === true };
+  if (payload.action === 'readOptions') {
+    if (observer!.observe(payload.field.fieldId)[0]?.snapshotVersion !== payload.field.snapshotVersion) return;
+    return readModelOptions(element, payload.query, () => keepGoing() && !localUserEdits.has(element));
+  }
+  const context = { semantic: payload.decision?.meaningId?.split('.').at(-1), optionRefs: payload.decision?.targetOptionIds, shouldContinue: keepGoing, overwrite: payload.overwrite === true };
   if (payload.action === 'verify' && element instanceof HTMLInputElement && element.type === 'file') return { status: element.files?.length === 1 && element.files[0].name === payload.value ? 'verified' : 'unverified', reason: '核对网页中的附件文件名' };
-  if (payload.action === 'verify') return verifyControl(element, payload.value, context);
+  if (payload.action === 'verify') return verifyControl(element, payload.value, { ...context, settleMs: 60 });
   if (payload.action === 'execute') {
     if (!payload.overwrite) {
       if (localUserEdits.has(element)) return { status: 'user-edited', reason: '用户已编辑该字段，已停止自动操作' };
-      const current = observer!.observe().find(field => field.fieldId === payload.field.fieldId);
+      const current = observer!.observe(payload.field.fieldId)[0];
       if (current?.snapshotVersion !== payload.field.snapshotVersion) return { status: 'stale', reason: '页面已变化，需要重新匹配' };
       if (observeControl(element).value) {
         const existing = await verifyControl(element, payload.value, { ...context, settleMs: 0, timeoutMs: 200 });
         return existing.status === 'verified' ? { ...existing, status: 'unchanged' } : { status: 'skipped-existing', reason: '已保留网页现有答案' };
       }
-      if (supportsCascader(element)) return { status: 'unsupported', reason: '此级联控件请在网页中选择后检查' };
+
     }
     if (element instanceof HTMLInputElement && element.type === 'file') {
       if (element.files?.length) return { status: 'skipped-existing', reason: '已保留现有附件' };

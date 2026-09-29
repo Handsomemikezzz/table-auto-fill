@@ -54,8 +54,13 @@ export function Fixture({ scenario }: { scenario: string }) {
   return <main>
     <h1>本地表单回归：{scenario}</h1>
     <form onSubmit={event => event.preventDefault()}>
-      {['react-text', 'rollback', 'user-edit', 'existing-text', 'linked', 'ai-cancel'].includes(scenario) && text('name', '姓名')}
+      {['react-text', 'rollback', 'user-edit', 'existing-text', 'linked', 'ai-cancel', 'personal-extra'].includes(scenario) && text('name', '姓名')}
       {['linked', 'ai-cancel'].includes(scenario) && text('email', '邮箱', 'email')}
+      {scenario === 'personal-extra' && <>
+        {text('age', '年龄', 'number')}{text('portfolioUrl', '作品集链接', 'url')}
+        {text('preferredCities', '意向城市')}{text('languageSkills', '语言能力')}
+        <fieldset><legend>推荐方式*</legend>{['内推', '大使推荐'].map((value, index) => <label key={value}><input type="radio" id={`referral-${index}`} name="referral" value={value} checked={state.referral === value} onChange={() => update('referral', value)} />{value}</label>)}</fieldset>
+      </>}
       {scenario === 'ai-cancel' && <label>上传简历<input id="resume" type="file" accept=".pdf" /></label>}
       {scenario.startsWith('select-') && <div className="field">
         <label htmlFor="gender">性别</label>

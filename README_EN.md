@@ -15,7 +15,7 @@ Job ApplyMate is a Chrome and Edge extension that keeps job-application informat
 | Feature | Description |
 |---|---|
 | Profile management | Store personal information, separate undergraduate/graduate education, work experience, projects, skills, certificates, and custom fields |
-| Fill current page | Every automatic binding is decided by the configured model, checked against saved fact and option IDs, then independently verified |
+| Fill current page | Reliable rules fill the page first; the model handles unmatched or failed fields, with independent verification |
 | Task panel | One panel across frames; separate counts for automatic, assisted, preserved and skipped fields; stop at any time |
 | Review queue | Recheck unconfirmed dates, locate dropdowns, confirm meanings or records, and supply missing facts |
 | Region filling | A secondary entry uses the same protocol for a selected area; no vision model required |
@@ -66,7 +66,7 @@ npm run package:extension
 4. Click **保存设置** (Save Settings).
 
 Add undergraduate and graduate education as separate records. Each record keeps its own school, college/department, major, major category/discipline, study mode, education level, academic degree, and dates. When a form explicitly says undergraduate or graduate, the matching record is selected instead of relying only on list order.
-Missing colleges, study modes, degrees and date precision remain missing. Automatic filling requires a configured model. Profile management, local parsing, the manual information assistant and backups remain available without a model.
+Missing colleges, study modes, degrees and date precision remain missing. Rule-based filling works without a model; configuring one enables fallback for remaining fields. Profile management, local parsing, the manual information assistant and backups remain available without a model.
 
 ### 2. Import and confirm
 
@@ -76,9 +76,9 @@ Add a resume in **简历库**. The attachment is saved independently. Review the
 
 Select **填写当前页面** (Fill current page). The default source is your general profile; optional role-specific profiles appear under **更多**. Choose an attachment separately. The task panel observes the page, requests model decisions, validates fact and record identities, executes supported controls and reads them back. Existing answers are preserved.
 
-Handle outstanding items through recheck, locate, meaning/record confirmation, missing fact entry or skip. Saving a fact is independent of whether the page accepts it. Explicit semantic corrections are scoped to the website, form structure and profile/registry versions, and can be disabled or deleted in Settings. Manual actions are counted separately.
+Handle outstanding items through recheck, locate, meaning/record confirmation, missing fact entry or skip. Saving a fact is independent of whether the page accepts it. Missing personal answers stay blank and are listed separately from failures. Use the optional personal-information form to save and fill, or save only. Saved age, portfolio URL, preferred cities, language skills and custom personal fields are reused across websites and edited in Personal Settings. Meaning corrections apply only to the current session. Manual actions are counted separately.
 
-The configured model endpoint is the only endpoint used. A model failure never falls back to rule-based automatic writing. New sessions always obtain model decisions. The first implementation uses the existing LLM connector through a provider interface; Laya integration and comparative accuracy/latency measurements remain a later phase. Complex cascaders may require manual selection.
+The configured model endpoint is the only endpoint used. Rules run across the page before model fallback starts. Failure in one module does not stop independent modules, and known fields require no model calls. The first implementation uses the existing LLM connector through a provider interface; Laya integration and comparative accuracy/latency measurements remain a later phase. Complex cascaders may require manual selection.
 
 ### 4. Other actions
 

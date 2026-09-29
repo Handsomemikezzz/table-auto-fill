@@ -1,4 +1,6 @@
+import { PERSONAL_EXTRA_FIELDS } from './personalFields.ts';
 const FIELD_TYPE_LABELS: Record<string, string> = {
+  ...Object.fromEntries(PERSONAL_EXTRA_FIELDS.map(field => [field.key, field.label])),
   name: '姓名',
   gender: '性别',
   birthDate: '出生日期',
