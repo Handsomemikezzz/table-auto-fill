@@ -1,3 +1,4 @@
+import { validateFieldMappings, type GroundedMapping } from '../services/llm/fieldMapping.ts';
 import type {
   FocusedFieldWriteResult,
   LearnedFieldValue,
@@ -43,7 +44,6 @@ import {
   buildAIFillValueCacheKey,
   buildFieldMatchingCacheKey,
 } from '../services/llm/fieldMatchingCache.ts';
-import { findBestDropdownOptionIndex } from '../utils/dropdownOption.ts';
 import {
   getLearnedFieldsForDomain,
   saveLearnedValueToProfile,
@@ -131,12 +131,17 @@ async function handleSaveLearnedFieldValue(
   }
 
   const store = (settings.learnedFieldValues || {}) as LearnedFieldStore;
+  const profilePath = savedProfilePath || inferProfilePath(profile, entry.value);
+  const recordMatch = profilePath?.match(/^(education|experience|projects|customInformation|certifications)(?:\[(\d+)\]|\.(\d+))\./);
+  const recordCollection = recordMatch && profile?.[recordMatch[1] as 'education' | 'experience' | 'projects' | 'customInformation' | 'certifications'];
+  const profileRecordId = recordMatch && recordCollection ? recordCollection[Number(recordMatch[2] ?? recordMatch[3])]?.id : undefined;
   const nextStore = updateLearnedFieldStore(store, normalizedDomain, {
     signature: entry.signature,
     label: entry.label.slice(0, 160),
     value: entry.value.slice(0, 4000),
     fieldType: entry.fieldType,
-    profilePath: savedProfilePath || inferProfilePath(profile, entry.value),
+    profilePath,
+    ...(profileRecordId ? { profileRecordId } : {}),
     updatedAt: entry.updatedAt,
   });
   const recognitionHint = options.recognitionHint?.trim();
@@ -217,7 +222,7 @@ function inferProfilePath(profile: UserProfile | null, expected: string): string
     }
   };
   visit(profile, '');
-  return matches.sort((left, right) => left.length - right.length)[0];
+  return matches.length === 1 ? matches[0] : undefined;
 }
 
 // 监听消息
@@ -509,7 +514,7 @@ function isRestrictedPage(url: string): boolean {
 
 async function handleAIFillSection(
   payload: AIFillSectionPayload
-): Promise<MessageResponse<Record<string, string>>> {
+): Promise<MessageResponse<Record<string, GroundedMapping>>> {
   const controller = new AbortController();
   aiFillControllers.get(payload.requestId)?.abort();
   aiFillControllers.set(payload.requestId, controller);
@@ -543,7 +548,7 @@ async function handleAIFillSection(
       : '';
     if (cacheKey && cacheField) {
       const cached = (await chrome.storage.local.get(cacheKey))[cacheKey];
-      if (typeof cached === 'string') {
+      if (cached && typeof cached === 'object') {
         const mappings = normalizeAIFillMappings(
           { [String(cacheField.index)]: cached },
           payload,
@@ -584,7 +589,7 @@ async function handleAIFillSection(
       return {
         success: false,
         error: timedOut
-          ? '当前字段的 AI 请求超过 25 秒，已停止后续请求并保留已填写内容'
+          ? '当前字段组的 AI 请求超过 25 秒，已保留已填写内容'
           : 'AI 补填已终止，已填写内容会保留',
       };
     }
@@ -600,30 +605,8 @@ async function handleAIFillSection(
   }
 }
 
-function normalizeAIFillMappings(
-  rawMappings: Record<string, unknown>,
-  payload: AIFillSectionPayload,
-  profile: UserProfile,
-): Record<string, string> {
-  const validFields = new Map(payload.fields.map(field => [String(field.index), field]));
-  const allowedProfileValues = collectProfileValues(profile);
-  const mappings: Record<string, string> = {};
-
-  for (const [index, rawValue] of Object.entries(rawMappings)) {
-    const field = validFields.get(index);
-    if (!field || typeof rawValue !== 'string') continue;
-
-    const value = rawValue.trim();
-    if (!value || !isAllowedProfileValue(value, allowedProfileValues)) continue;
-    if (field.options.length > 0) {
-      const optionIndex = findBestDropdownOptionIndex(value, field.options);
-      if (optionIndex < 0) continue;
-      mappings[index] = field.options[optionIndex];
-    } else {
-      mappings[index] = value;
-    }
-  }
-  return mappings;
+function normalizeAIFillMappings(rawMappings: Record<string, unknown>, payload: AIFillSectionPayload, profile: UserProfile): Record<string, GroundedMapping> {
+  return validateFieldMappings(rawMappings, payload.fields, profile);
 }
 
 function getAIFillProfileFingerprint(profile: UserProfile): string {
@@ -636,53 +619,6 @@ function getAIFillProfileFingerprint(profile: UserProfile): string {
     certifications: profile.certifications,
     customInformation: profile.customInformation,
   });
-}
-
-function collectProfileValues(profile: UserProfile): string[] {
-  const values: string[] = [];
-  const visit = (value: unknown, key = ''): void => {
-    if (typeof value === 'string') {
-      if (value.trim() && key !== 'id') values.push(value.trim());
-      return;
-    }
-    if (!value || typeof value !== 'object') return;
-    if (Array.isArray(value)) {
-      value.forEach(item => visit(item));
-      return;
-    }
-    for (const [childKey, child] of Object.entries(value)) {
-      if (['resume', 'resumes', 'fileData', 'parsedText', 'rawText'].includes(childKey)) continue;
-      visit(child, childKey);
-    }
-  };
-  visit(profile);
-  return values;
-}
-
-function isAllowedProfileValue(value: string, allowed: string[]): boolean {
-  const normalized = value.replace(/\s+/g, ' ').trim().toLowerCase();
-  if (allowed.some(candidate => (
-    candidate.replace(/\s+/g, ' ').trim().toLowerCase() === normalized
-    || areEquivalentDates(candidate, value)
-  ))) return true;
-  const year = normalized.match(/^((?:19|20)\d{2})年?$/)?.[1];
-  const month = normalized.match(/^(0?[1-9]|1[0-2])(?:月|月份)$/)?.[1];
-  if (allowed.some(candidate => {
-    const compact = candidate.replace(/\s+/g, '').toLowerCase();
-    if (year && compact.startsWith(year)) return true;
-    if (month) {
-      const candidateMonth = compact.match(/^(?:19|20)\d{2}[./-](\d{1,2})/)?.[1];
-      if (candidateMonth && Number(candidateMonth) === Number(month)) return true;
-    }
-    if (normalized.length < 2 || normalized.length > 30 || compact.length > 30) return false;
-    const negative = (text: string) => /^[不非无未否]/.test(text);
-    return negative(compact) === negative(normalized)
-      && (compact.includes(normalized) || normalized.includes(compact));
-  })) return true;
-  const parts = value.split(/[,，、/|;；\n]+/).map(part => part.trim()).filter(Boolean);
-  return parts.length > 1 && parts.every(part => allowed.some(candidate => (
-    candidate.toLowerCase() === part.toLowerCase()
-  )));
 }
 
 function handleCancelAIFill(requestId: string): MessageResponse {

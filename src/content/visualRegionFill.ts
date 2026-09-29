@@ -1,3 +1,4 @@
+import { discoverControls, observeControl, getControlValue, getControlLabel, getOptions } from './controlObservation.ts';
 import type {
   Message,
   MessageResponse,
@@ -9,14 +10,12 @@ import type {
   VisualRegionSelectionRect,
 } from '../shared/types.ts';
 
-type WritableControl =
-  | HTMLInputElement
-  | HTMLTextAreaElement
-  | HTMLSelectElement;
+type WritableControl = HTMLElement;
 
 type FillValuesInput = Array<{
   element: WritableControl | { id?: string };
   value: string;
+  optionRef?: string;
 }>;
 
 type FillElementValues = (
@@ -52,6 +51,9 @@ interface VisualRegionFillControllerDeps {
   sendRuntimeMessage<T = unknown>(message: Message): Promise<MessageResponse<T>>;
   fillElementValues: FillElementValues;
   onFillComplete?: () => void;
+  verifyFilled?: () => Promise<number>;
+  onSessionStateChange?: (active: boolean) => void;
+  describeFields?: (elements: HTMLElement[]) => Map<HTMLElement, { semantic?: string; blockId?: string }>;
 }
 
 const DEFAULT_FILL_ELEMENT_VALUES: FillElementValues = async () => {
@@ -62,14 +64,17 @@ export function createVisualRegionFillController(
   deps: VisualRegionFillControllerDeps,
 ): { beginVisualRegionFill(): void } {
   let cleanupSelection: (() => void) | null = null;
+  let running = false;
 
   const beginVisualRegionFill = () => {
+    if (running) return;
     if (cleanupSelection) {
       cleanupSelection();
       cleanupSelection = null;
       return;
     }
 
+    deps.onSessionStateChange?.(true);
     const overlay = document.createElement('div');
     const label = document.createElement('div');
     const tip = document.createElement('div');
@@ -106,7 +111,7 @@ export function createVisualRegionFillController(
       label.textContent = getRegionName(selectedRegion);
     };
 
-    const cleanup = () => {
+    const cleanup = (keepSession = false) => {
       document.removeEventListener('mousemove', handleMove, true);
       document.removeEventListener('mousedown', handleMouseDown, true);
       document.removeEventListener('mouseup', handleMouseUp, true);
@@ -117,6 +122,14 @@ export function createVisualRegionFillController(
       label.remove();
       tip.remove();
       cleanupSelection = null;
+      if (!keepSession) deps.onSessionStateChange?.(false);
+    };
+
+    const execute = async (input: Parameters<typeof runVisualRegionFill>[0]) => {
+      running = true;
+      cleanup(true);
+      try { await runVisualRegionFill(input, deps); }
+      finally { running = false; deps.onSessionStateChange?.(false); }
     };
 
     const handleMove = (event: MouseEvent) => {
@@ -173,19 +186,18 @@ export function createVisualRegionFillController(
       dragStart = null;
       dragging = false;
       suppressClick = true;
-      cleanup();
 
       if (width < 8 || height < 8) {
+        cleanup();
         return;
       }
 
-      await runVisualRegionFill(
+      await execute(
         {
           root: document.body,
           selectionRect: new DOMRect(left, top, width, height),
           pageContext: document.body.innerText || document.body.textContent || '',
         },
-        deps,
       );
     };
 
@@ -202,14 +214,12 @@ export function createVisualRegionFillController(
       event.stopPropagation();
       event.stopImmediatePropagation();
       const region = selectedRegion;
-      cleanup();
-      await runVisualRegionFill(
+      await execute(
         {
           root: region,
           selectionRect: region.getBoundingClientRect(),
           pageContext: region.innerText || region.textContent || '',
         },
-        deps,
       );
     };
 
@@ -219,7 +229,7 @@ export function createVisualRegionFillController(
       }
     };
 
-    cleanupSelection = cleanup;
+    cleanupSelection = () => cleanup();
     document.addEventListener('mousedown', handleMouseDown, true);
     document.addEventListener('mousemove', handleMove, true);
     document.addEventListener('mouseup', handleMouseUp, true);
@@ -250,6 +260,9 @@ export function serializeVisualControls(
       name: candidate.name,
       placeholder: candidate.placeholder || '',
       options: candidate.options || [],
+      ...(candidate.semantic ? { semantic: candidate.semantic } : {}),
+      ...(candidate.blockId ? { blockId: candidate.blockId } : {}),
+      ...(candidate.optionCandidates ? { optionCandidates: candidate.optionCandidates, optionsComplete: candidate.optionsComplete } : {}),
       rect: {
         left: candidate.rect.left,
         top: candidate.rect.top,
@@ -273,7 +286,7 @@ export async function applyVisualRegionMappings(
     const control = controlsById.get(mapping.controlId);
     if (!control?.element || !String(mapping.value || '').trim()) continue;
     if (isDomWritableControl(control.element) && currentControlValue(control.element)) continue;
-    values.push({ element: control.element, value: mapping.value });
+    values.push({ element: control.element, value: mapping.value, ...(mapping.optionId ? { optionRef: mapping.optionId } : {}) });
   }
 
   if (values.length === 0) {
@@ -315,6 +328,10 @@ async function runVisualRegionFill(
 
   try {
     const candidates = collectVisualControlBindings(input.root);
+    const descriptions = deps.describeFields?.(candidates.flatMap(candidate => candidate.element ? [candidate.element] : []));
+    for (const candidate of candidates) {
+      if (candidate.element) Object.assign(candidate, descriptions?.get(candidate.element));
+    }
     const controls = serializeVisualControls(candidates, input.selectionRect);
     if (controls.length === 0) {
       status.update('当前选区内没有可补填的输入控件', 'warning');
@@ -345,12 +362,14 @@ async function runVisualRegionFill(
       throw new Error(response.error || 'AI 未返回补填结果');
     }
 
-    const filledCount = await applyVisualRegionMappings(
+    let filledCount = await applyVisualRegionMappings(
       response.data.mappings,
       controlsById,
       () => !cancelled,
       deps.fillElementValues,
     );
+    if (cancelled) return;
+    if (deps.verifyFilled) filledCount = await deps.verifyFilled();
     deps.onFillComplete?.();
     if (cancelled) return;
 
@@ -380,14 +399,10 @@ async function runVisualRegionFill(
 }
 
 function collectVisualControlBindings(root: ParentNode): VisualControlBinding[] {
-  const elements = Array.from(
-    root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
-      'input, textarea, select',
-    ),
-  );
+  const elements = discoverControls(root as Document | ShadowRoot | HTMLElement);
 
   return elements.flatMap(element => {
-    if (!isWritableControl(element) || element.offsetParent === null) {
+    if (!isWritableControl(element)) {
       return [];
     }
 
@@ -403,7 +418,7 @@ function collectVisualControlBindings(root: ParentNode): VisualControlBinding[] 
       element.getAttribute('data-form-field-i18n-name')
       || container?.getAttribute('data-form-field-i18n-name')
       || container?.querySelector('label')?.textContent
-      || findLabelText(element)
+      || getControlLabel(element) || findLabelText(element)
       || ''
     ).trim();
     const name = (
@@ -411,7 +426,7 @@ function collectVisualControlBindings(root: ParentNode): VisualControlBinding[] 
       || container?.getAttribute('data-form-field-name')
       || element.getAttribute('data-form-field-id')
       || container?.getAttribute('data-form-field-id')
-      || element.name
+      || element.getAttribute('name')
       || ''
     ).trim();
 
@@ -424,6 +439,8 @@ function collectVisualControlBindings(root: ParentNode): VisualControlBinding[] 
       name,
       placeholder: element.getAttribute('placeholder') || '',
       options: collectControlOptions(element, label, name),
+      optionCandidates: getOptions(element).map(({ element: _element, ...option }) => option),
+      optionsComplete: observeControl(element).optionsComplete,
       rect: {
         left: rect.left,
         top: rect.top,
@@ -490,36 +507,10 @@ function normalizeContextText(text: string): string {
   return text.replace(/\s+/g, ' ').trim().slice(0, 240);
 }
 
-function isWritableControl(
-  target: EventTarget | null,
-): target is WritableControl {
-  if (
-    !(target instanceof HTMLInputElement)
-    && !(target instanceof HTMLTextAreaElement)
-    && !(target instanceof HTMLSelectElement)
-  ) {
-    return false;
-  }
-  if (target.disabled) return false;
-
-  if (target instanceof HTMLInputElement) {
-    const unsupportedTypes = new Set([
-      'hidden',
-      'file',
-      'button',
-      'submit',
-      'reset',
-      'image',
-    ]);
-    if (unsupportedTypes.has(target.type.toLowerCase())) return false;
-    if (target.readOnly) {
-      return target.getAttribute('role') === 'combobox'
-        || Boolean(target.closest('.ant-picker, .el-date-editor, .arco-picker, .semi-datepicker, [data-picker]'));
-    }
-  }
-
-  if (target instanceof HTMLTextAreaElement && target.readOnly) return false;
-  return true;
+function isWritableControl(target: EventTarget | null): target is WritableControl {
+  if (!(target instanceof HTMLElement)) return false;
+  const observed = observeControl(target);
+  return !observed.disabled && observed.kind !== 'unsupported';
 }
 
 function isDomWritableControl(
@@ -529,56 +520,11 @@ function isDomWritableControl(
 }
 
 function currentControlValue(element: WritableControl): string {
-  if (element instanceof HTMLInputElement && ['radio', 'checkbox'].includes(element.type)) {
-    return element.checked ? (element.value || 'checked') : '';
-  }
-  if (
-    element instanceof HTMLInputElement
-    && element.getAttribute('role') === 'combobox'
-    && element.closest('.ud__select')
-  ) {
-    const container = element.closest<HTMLElement>(
-      '[data-form-field-id], [data-form-field-name], [data-form-field-i18n-name]',
-    );
-    const selectedText = (
-      container?.querySelector('.ud__select__selector__selectItem')?.textContent || ''
-    ).trim();
-    return selectedText || element.value.trim();
-  }
-
-  if (element instanceof HTMLSelectElement) {
-    const selectedText = element.options[element.selectedIndex]?.text || '';
-    return element.value.trim() || selectedText.trim();
-  }
-
-  return element.value.trim();
+  return getControlValue(element);
 }
 
-function collectControlOptions(
-  element: WritableControl,
-  label: string,
-  name: string,
-): string[] {
-  if (element instanceof HTMLSelectElement) {
-    return Array.from(element.options)
-      .map(option => option.text.trim())
-      .filter(Boolean);
-  }
-
-  if (label === '学历类型' || label === '学习形式' || name === 'education_type') {
-    return ['海外及港澳台', '统招全日制', '统招非全日制', '自考', '其他'];
-  }
-  if (label === '学历' || name === 'degree') {
-    return ['高中', '专科', '本科', '硕士研究生', '博士研究生'];
-  }
-  if (label.includes('学位') || name === 'academic_degree') {
-    return ['无', '学士', '硕士', '博士'];
-  }
-  if (label.includes('政治面貌') || label.includes('政治状态') || name === 'political_status') {
-    return ['中共党员', '中共预备党员', '共青团员', '群众', '民主党派', '无党派人士'];
-  }
-
-  return [];
+function collectControlOptions(element: WritableControl, _label: string, _name: string): string[] {
+  return getOptions(element).filter(option => !option.disabled).map(option => option.label);
 }
 
 function findLabelText(element: WritableControl): string {

@@ -41,3 +41,15 @@ test('多选和级联值只在对应模式下拆分', () => {
   assert.deepEqual(splitCascaderValue('浙江省 / 杭州市 / 西湖区'), ['浙江省', '杭州市', '西湖区']);
   assert.deepEqual(splitCascaderValue('2020/06'), ['2020/06']);
 });
+
+test('兼容函数也拒绝数值编码猜测、不精确别名及重复选项', () => {
+  assert.equal(findBestDropdownOptionIndex('yes', ['0', '1']), -1);
+  assert.equal(findBestDropdownOptionIndex('男', ['0', '1']), -1);
+  assert.equal(findBestDropdownOptionIndex('本科', ['学士']), -1);
+  assert.equal(findBestDropdownOptionIndex('高中', ['中专']), -1);
+  assert.equal(findBestDropdownOptionIndex('在校生', ['应届生']), -1);
+  assert.equal(findBestDropdownOptionIndex('男', ['男', '男']), -1);
+  assert.equal(findBestDropdownOptionIndex('本科', ['本科', '大学本科']), -1);
+  assert.equal(findBestDropdownOptionIndex('软件', ['软件工程']), -1);
+  assert.equal(dropdownValueMatches('1.0', '10'), false);
+});

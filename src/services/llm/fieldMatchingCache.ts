@@ -1,3 +1,4 @@
+import type { ControlOption } from '../../shared/fillModel.ts';
 export interface CacheableField {
   index: number;
   name: string;
@@ -15,6 +16,11 @@ export interface CacheableAIFillField {
   label: string;
   type: string;
   options: string[];
+  optionCandidates?: ControlOption[];
+  optionsComplete?: boolean;
+  semantic?: string;
+  recordId?: string;
+  recordCollection?: 'education' | 'experience' | 'projects';
   context: string;
   blockId?: string;
   blockContext?: string;
@@ -51,6 +57,11 @@ export function buildAIFillValueCacheKey(
       label: field.label,
       type: field.type,
       options: field.options,
+      optionCandidates: field.optionCandidates,
+      optionsComplete: field.optionsComplete,
+      semantic: field.semantic,
+      recordId: field.recordId,
+      recordCollection: field.recordCollection,
       context: field.context,
       blockId: field.blockId || '',
       blockContext: field.blockContext || '',
@@ -63,5 +74,5 @@ export function buildAIFillValueCacheKey(
     hash ^= source.charCodeAt(index);
     hash = Math.imul(hash, 0x01000193);
   }
-  return `aiPageFill_v2_${(hash >>> 0).toString(16).padStart(8, '0')}`;
+  return `aiPageFill_v3_${(hash >>> 0).toString(16).padStart(8, '0')}`;
 }

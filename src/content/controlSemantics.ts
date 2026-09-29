@@ -1,4 +1,6 @@
-export type FormControl = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+import { observeControl, getOptions, getControlValue } from './controlObservation.ts';
+import { scoreDropdownOption } from '../utils/dropdownOption.ts';
+export type FormControl = HTMLElement;
 
 export function isChoiceControl(element: FormControl): element is HTMLInputElement {
   return element instanceof HTMLInputElement && ['radio', 'checkbox'].includes(element.type);
@@ -73,51 +75,17 @@ export function getChoiceQuestion(element: HTMLInputElement): string {
 }
 
 export function getControlOptions(element: FormControl): string[] {
-  if (isChoiceControl(element)) {
-    return unique(getChoiceGroup(element).map(getChoiceLabel).filter(Boolean));
-  }
-  if (element instanceof HTMLSelectElement) {
-    return unique(Array.from(element.options)
-      .filter(option => !option.disabled && Boolean(option.value || option.text.trim()))
-      .map(option => option.text.trim())
-      .filter(Boolean));
-  }
-  if (element instanceof HTMLInputElement && element.getAttribute('role') === 'combobox') {
-    const controlledId = element.getAttribute('aria-controls') || element.getAttribute('aria-owns');
-    const root = element.getRootNode() as Document | ShadowRoot;
-    const controlled = controlledId ? root.getElementById(controlledId) : null;
-    return unique(Array.from(controlled?.querySelectorAll<HTMLElement>('[role="option"]') || [])
-      .map(option => normalizeText(option.textContent))
-      .filter(Boolean));
-  }
-  return [];
+  return getOptions(element).filter(option => !option.disabled).map(option => option.label).filter(Boolean);
 }
 
 export function getLogicalControlValue(element: FormControl): string {
-  if (isChoiceControl(element)) {
-    const selected = getChoiceGroup(element).filter(choice => choice.checked);
-    return selected.map(choice => getChoiceLabel(choice) || choice.value).filter(Boolean).join(', ');
-  }
-  if (element instanceof HTMLInputElement && element.getAttribute('role') === 'combobox') {
-    const container = element.closest<HTMLElement>(
-      '[data-form-field-id], [data-form-field-name], [data-form-field-i18n-name], .ud__select, .ant-select, .el-select, .MuiAutocomplete-root, .react-select__control, .semi-select, .arco-select, [class*="cascader" i]'
-    );
-    const displayed = Array.from(container?.querySelectorAll<HTMLElement>([
-      '.ud__select__selector__selectItem', '.ant-select-selection-item',
-      '.ant-select-selection-item-content', '.el-select__selected-item',
-      '.el-tag__content', '.MuiAutocomplete-tag .MuiChip-label',
-      '.react-select__multi-value__label', '.semi-select-selection-text',
-      '.arco-select-view-value', '[aria-selected="true"]',
-    ].join(',')) || []).map(item => normalizeText(item.textContent)).filter(Boolean);
-    return unique(displayed).join(', ') || element.value.trim();
-  }
-  return element.value.trim();
+  return getControlValue(element);
 }
 
 export function isLogicalChoiceRepresentative(element: FormControl): boolean {
-  if (!isChoiceControl(element)) return true;
-  const group = getChoiceGroup(element);
-  return (group.find(choice => !choice.disabled) || group[0]) === element;
+  const observed = observeControl(element);
+  if (!['radio', 'checkbox'].includes(observed.kind)) return true;
+  return (observed.group.find(choice => !observeControl(choice).disabled) || observed.group[0]) === element;
 }
 
 export function normalizeComparable(value: string): string {
@@ -125,25 +93,12 @@ export function normalizeComparable(value: string): string {
 }
 
 export function doesChoiceMatch(choiceValue: string, choiceLabel: string, desiredValue: string): boolean {
-  const desired = normalizeComparable(desiredValue);
-  const texts = [choiceValue, choiceLabel].map(normalizeComparable).filter(Boolean);
-  if (!desired || texts.length === 0) return false;
-  const yes = new Set(['true', 'yes', '1', '是', '同意', '接受', '已勾选']);
-  const no = new Set(['false', 'no', '0', '否', '不同意', '不接受', '未勾选']);
-  return texts.some(text => {
-    if (text === desired) return true;
-    if (yes.has(desired) && yes.has(text)) return true;
-    if (no.has(desired) && no.has(text)) return true;
-    const negative = (candidate: string) => /^[不非无未否]/.test(candidate);
-    if (negative(text) !== negative(desired)) return false;
-    return desired.length >= 2 && text.length >= 2 && (text.includes(desired) || desired.includes(text));
-  });
+  // A visible label is authoritative; opaque raw codes have no global meaning.
+  const label = choiceLabel.trim();
+  const candidate = label || (/^[01]$/.test(choiceValue) ? '' : choiceValue);
+  return scoreDropdownOption(desiredValue, candidate) >= 900;
 }
 
 function normalizeText(value: unknown): string {
-  return String(value || '').replace(/\s+/g, ' ').trim();
-}
-
-function unique(values: string[]): string[] {
-  return Array.from(new Set(values));
+  return String(value ?? '').replace(/\s+/g, ' ').trim();
 }

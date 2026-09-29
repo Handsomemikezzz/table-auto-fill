@@ -1,3 +1,4 @@
+import type { ControlOption } from '../shared/fillModel.ts';
 export type PageScanSection = 'personal' | 'education' | 'experience' | 'projects' | 'other';
 
 export interface PageScanField {
@@ -8,6 +9,11 @@ export interface PageScanField {
   label: string;
   type: string;
   options: string[];
+  optionCandidates?: ControlOption[];
+  optionsComplete?: boolean;
+  semantic?: string;
+  recordId?: string;
+  recordCollection?: 'education' | 'experience' | 'projects';
   context: string;
   blockId?: string;
   blockContext?: string;

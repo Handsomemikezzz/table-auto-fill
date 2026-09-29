@@ -1,14 +1,11 @@
+import { validateFieldMappings } from './fieldMapping.ts';
 import type {
   UserProfile,
-  VisualRegionControlCandidate,
   VisualRegionFillMapping,
   VisualRegionFillMappingResult,
   VisualRegionFillPayload,
 } from '../../shared/types.ts';
-import {
-  findBestDropdownOptionIndex,
-  scoreDropdownOption,
-} from '../../utils/dropdownOption.ts';
+
 
 export function parseVisualRegionFillResponse(raw: string): VisualRegionFillMappingResult {
   const normalized = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
@@ -28,6 +25,7 @@ export function parseVisualRegionFillResponse(raw: string): VisualRegionFillMapp
           fieldMeaning: mapping.fieldMeaning.trim(),
           matchedProfilePath: mapping.matchedProfilePath.trim(),
           value: mapping.value.trim(),
+          ...(mapping.optionId ? { optionId: mapping.optionId } : {}),
         }))
     : [];
 
@@ -39,35 +37,26 @@ export function validateVisualRegionMappings(
   payload: VisualRegionFillPayload,
   profile: UserProfile,
 ): VisualRegionFillMappingResult['mappings'] {
-  const controls = new Map<string, VisualRegionControlCandidate>(
-    payload.controls.map(control => [control.controlId, control]),
-  );
-
-  return mappings.flatMap((mapping): VisualRegionFillMapping[] => {
-    const control = controls.get(mapping.controlId);
-    if (!control || !mapping.value.trim()) return [];
-
-    const profileValue = getProfileValue(profile, mapping.matchedProfilePath);
-    if (typeof profileValue !== 'string'
-      || (profileValue !== mapping.value && scoreDropdownOption(profileValue, mapping.value) < 900)) {
-      return [];
-    }
-
-    if (control.options.length === 0) return [mapping];
-    const optionIndex = findBestDropdownOptionIndex(mapping.value, control.options);
-    return optionIndex >= 0 ? [{ ...mapping, value: control.options[optionIndex] }] : [];
-  });
-}
-
-function getProfileValue(profile: UserProfile, path: string): unknown {
-  return path
-    .split('.')
-    .filter(Boolean)
-    .reduce<unknown>((current, segment) => {
-      if (current === null || current === undefined) return undefined;
-      const key = /^\d+$/.test(segment) ? Number(segment) : segment;
-      return (current as Record<string, unknown> | unknown[])[key as never];
-    }, profile);
+  const fields = payload.controls.map((control, index) => ({ ...control, index }));
+  const indexes = new Map(fields.map(field => [field.controlId, field.index]));
+  const raw: Record<string, unknown> = {};
+  const originals = new Map<number, VisualRegionFillMapping>();
+  const duplicate = new Set<number>();
+  for (const mapping of mappings) {
+    const index = indexes.get(mapping.controlId);
+    if (index === undefined || !mapping.value.trim()) continue;
+    const candidate = { profilePath: mapping.matchedProfilePath, value: mapping.value, optionId: mapping.optionId };
+    if (!validateFieldMappings({ [index]: candidate }, [fields[index]], profile)[String(index)]) continue;
+    if (originals.has(index)) { duplicate.add(index); continue; }
+    originals.set(index, mapping);
+    raw[index] = candidate;
+  }
+  for (const index of duplicate) delete raw[index];
+  const validated = validateFieldMappings(raw, fields, profile);
+  return Object.entries(validated).map(([index, result]) => ({
+    ...originals.get(Number(index))!, value: result.value,
+    ...(result.optionId ? { optionId: result.optionId } : {}),
+  }));
 }
 
 function isVisualRegionFillMapping(value: unknown): value is VisualRegionFillMapping {

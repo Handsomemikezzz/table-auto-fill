@@ -1,20 +1,14 @@
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { findBrowserExecutable } from './browser-test-utils.js';
 
 const projectRoot = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const extensionDir = join(projectRoot, 'dist');
-const chromeCandidates = [
-  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-  'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-  'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-];
-const browserPath = chromeCandidates.find(existsSync);
-if (!browserPath) throw new Error('未找到可用于冒烟测试的 Chrome 或 Edge');
+const browserPath = findBrowserExecutable();
 
 const server = createServer((request, response) => {
   response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -28,8 +22,8 @@ const server = createServer((request, response) => {
     <label for="political-status">政治面貌</label><select id="political-status" name="political_status" required>
       <option value="">请选择</option><option value="member">中共党员</option><option value="democratic">民主党派</option><option value="probationary">中共预备党员</option><option value="league">共青团员</option>
     </select>
-    <label id="degree-label" for="degree">学历</label>
-    <div class="ant-select ant-select-show-search"><input id="degree" name="degree" role="combobox" aria-labelledby="degree-label" aria-controls="degree-list" aria-expanded="false" aria-autocomplete="list" required></div>
+    <label id="degree-label" for="degree">本科学历</label>
+    <div class="ant-select ant-select-show-search"><span class="ant-select-selection-item"></span><input id="degree" name="degree" role="combobox" aria-labelledby="degree-label" aria-controls="degree-list" aria-expanded="false" aria-autocomplete="list" required></div>
     <div id="degree-list" role="listbox" style="display:none;position:absolute;background:white"></div>
     <fieldset id="graduate-education"><legend>硕士研究生教育经历</legend>
       <label for="graduate-school">研究生学校</label><input id="graduate-school" name="graduate_school">
@@ -66,6 +60,7 @@ const server = createServer((request, response) => {
           ).join('');
           degreeList.querySelectorAll('[role="option"]').forEach(option => option.addEventListener('click', () => {
             degreeInput.value = option.dataset.value;
+            degreeInput.parentElement.querySelector('.ant-select-selection-item').textContent = option.dataset.value;
             option.setAttribute('aria-selected', 'true');
             degreeInput.setAttribute('aria-expanded', 'false');
             degreeList.style.display = 'none';
@@ -86,7 +81,9 @@ const pageUrl = `http://127.0.0.1:${address.port}/`;
 const debugPort = address.port + 1;
 const profileDir = mkdtempSync(join(tmpdir(), 'job-applymate-smoke-'));
 const browser = spawn(browserPath, [
+  ...(process.env.JOB_APPLYMATE_HEADED === '1' ? [] : ['--headless=new']),
   '--disable-gpu',
+  '--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding',
   '--start-minimized',
   '--window-position=-32000,-32000',
   '--window-size=800,600',
@@ -129,7 +126,7 @@ async function sendCdpCommand(webSocketUrl, method, params) {
     socket.addEventListener('error', reject, { once: true });
   });
   const result = await new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('浏览器检查超时')), 5000);
+    const timeout = setTimeout(() => reject(new Error('浏览器检查超时')), 60000);
     socket.addEventListener('message', event => {
       const message = JSON.parse(event.data);
       if (message.id !== 1) return;
@@ -259,6 +256,7 @@ try {
     undergraduateMajorCategory: document.querySelector('#undergraduate-major-category')?.value,
     undergraduateDegree: document.querySelector('#undergraduate-degree')?.value,
     undergraduateAcademicDegree: document.querySelector('#undergraduate-academic-degree')?.value,
+    genericRequiredHelper: document.querySelector('#generic-required-helper')?.value,
     resumeName: document.querySelector('#resume')?.files?.[0]?.name || '',
     failureLabels: Array.from(document.querySelectorAll('[data-failure-review-label="true"]')).map(item => item.textContent)
   })`);
@@ -269,7 +267,8 @@ try {
     || filledValues?.graduateMajorCategory !== '动力工程及工程热物理' || filledValues?.graduateDegree !== '硕士研究生'
     || filledValues?.graduateAcademicDegree !== '工程硕士' || filledValues?.undergraduateSchool !== '山东科技大学'
     || filledValues?.undergraduateCollege !== '智能装备学院' || filledValues?.undergraduateMajorCategory !== '机械类'
-    || filledValues?.undergraduateDegree !== '本科' || filledValues?.undergraduateAcademicDegree !== '工学学士') {
+    || filledValues?.undergraduateDegree !== '本科' || filledValues?.undergraduateAcademicDegree !== '工学学士'
+    || filledValues?.genericRequiredHelper !== '') {
     runtimeDiagnostics.close();
     throw new Error(`真实浏览器写入结果错误：${JSON.stringify({ quickFill, filledValues, runtimeMessages: runtimeDiagnostics.messages })}`);
   }
@@ -290,6 +289,7 @@ try {
     document.querySelector('#name').value = '';
     document.querySelector('#email').value = '';
     document.querySelector('#degree').value = '';
+    document.querySelector('.ant-select-selection-item').textContent = '';
     document.querySelector('#degree').setAttribute('aria-expanded', 'false');
     document.querySelector('#degree-list').innerHTML = '';
     document.querySelector('#degree-list').style.display = 'none';
@@ -323,6 +323,14 @@ try {
     || valuesKeptAfterAIStopped?.degree !== '大学本科') {
     throw new Error(`AI 中止时未保留已完成结果：${JSON.stringify({ progressiveAI, valuesKeptAfterAIStopped })}`);
   }
+  const aiSettled = await evaluate(webSocketUrl, `(async () => {
+    for (let attempt = 0; attempt < 200; attempt++) {
+      if (/AI 扫描填充完成|AI 扫描已停止|AI 扫描填充已终止|未检测到可扫描的空白表单字段/.test(document.body.innerText)) return true;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    return false;
+  })()`);
+  if (!aiSettled) throw new Error('AI 填写未结束，不能并发测试悬浮窗写入');
   const overlayOpen = await evaluate(serviceWorker.webSocketDebuggerUrl, `(async () => {
     const tabs = await chrome.tabs.query({ url: ${JSON.stringify(pageUrl)} });
     if (!tabs[0]?.id) return { success: false, error: '测试页标签不存在' };
@@ -446,8 +454,11 @@ try {
     input.value = '13800001111';
     hint.value = '这是紧急联系人的电话，不是候选人本人的联系电话';
     remember.click();
-    await new Promise(resolve => setTimeout(resolve, 500));
-    return document.querySelector('#emergency-phone')?.value === '13800001111';
+    for (let attempt = 0; attempt < 60; attempt++) {
+      if (!row.isConnected) return document.querySelector('#emergency-phone')?.value === '13800001111';
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    return false;
   })()`);
   const learnedEmergency = await evaluate(serviceWorker.webSocketDebuggerUrl, `(async () => {
     const stored = await chrome.storage.local.get(['userProfile', 'settings']);
@@ -464,6 +475,8 @@ try {
     || learnedEmergency?.learnedValue !== '13800001111' || !learnedEmergency?.hasRule) {
     throw new Error(`缺失信息学习未完整保存：${JSON.stringify({ answerSaved, learnedEmergency })}`);
   }
+  const genericHelperValue = await evaluate(webSocketUrl, `document.querySelector('#generic-required-helper')?.value`);
+  if (genericHelperValue !== '') throw new Error(`无标题辅助输入框被误填：${JSON.stringify(genericHelperValue)}`);
   console.log('✓ content.js 在真实浏览器表单页中成功初始化');
   console.log(`✓ 真实浏览器识别到 ${detection.data.count} 个可填字段`);
   console.log(`✓ 真实浏览器快速填充成功（${quickFill.durationMs}ms）`);
@@ -479,6 +492,7 @@ try {
   console.log('✓ 信息悬浮窗默认展开全部栏目');
   console.log('✓ 失败复盘窗口不会继承招聘网站的大字号样式');
   console.log('✓ 失败复盘会过滤辅助输入框，并对同一逻辑字段去重显示');
+  console.log('✓ 无标题辅助输入框不会借用其他字段标签误填姓名');
   console.log('✓ 紧急联系电话不会误用本人手机号，补填答案会同时保存到个人资料和网站学习记录');
   console.log('✓ 失败窗口中的 AI 识别纠错会写入 Markdown Skill');
   console.log('✓ 内部英文字段键显示为中文，自动学习条目在悬浮窗中单独归入“缺失信息填补”');

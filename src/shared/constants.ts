@@ -31,6 +31,9 @@ export const FIELD_PATTERNS: Record<string, string[]> = {
     'politicalstatus', 'political_status', 'politicalaffiliation',
     '政治面貌', '政治状态', '党派', '政治身份'
   ],
+  [FieldType.ETHNICITY]: ['ethnicity', 'ethnic group', '民族'],
+  [FieldType.HOMETOWN]: ['hometown', 'home town', '籍贯'],
+  [FieldType.CURRENT_ADDRESS]: ['currentaddress', 'current address', 'residential address', '现居地', '现居住地', '现居地址', '通讯地址', '联系地址'],
   [FieldType.SCHOOL]: [
     'school', 'university', '学校', '院校',
     '毕业院校', '就读学校', 'alma'

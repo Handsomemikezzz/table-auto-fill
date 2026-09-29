@@ -1,3 +1,5 @@
+import { discoverControls, observeControl, getControlLabel } from './controlObservation.ts';
+import { dateRangePart } from './fieldBinding.ts';
 import type { DetectedField } from '../shared/types';
 import { FieldType } from '../shared/types';
 import { FieldMatcher } from '../utils/fieldMatcher';
@@ -6,11 +8,10 @@ import {
   getChoiceQuestion,
   getControlOptions,
   isChoiceControl,
-  isLogicalChoiceRepresentative,
 } from './controlSemantics';
 
 export interface UnmatchedField {
-  element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+  element: HTMLElement;
   identifiers: ReturnType<typeof FieldMatcher.extractIdentifiers>;
 }
 
@@ -45,12 +46,8 @@ export class FormDetector {
     this.unmatchedFields = [];
 
     const roots = this.getSearchRoots();
-    const controls = roots.flatMap(root => Array.from(root.querySelectorAll<
-      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-    >('input:not([type="hidden"]):not([type="submit"]):not([type="button"]), textarea, select')));
-    controls.forEach(control => {
-      if (isLogicalChoiceRepresentative(control)) this.analyzeElement(control);
-    });
+    const controls = [...new Set(roots.flatMap(root => discoverControls(root as Document | ShadowRoot | HTMLElement)))];
+    controls.forEach(control => this.analyzeElement(control));
 
     console.log(`Detected ${this.detectedFields.length} form fields, ${this.unmatchedFields.length} unmatched`);
     return this.detectedFields;
@@ -58,7 +55,7 @@ export class FormDetector {
 
   // 分析单个元素
   private analyzeElement(
-    element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    element: HTMLElement
   ): void {
     const root = element.getRootNode();
     if (
@@ -81,7 +78,7 @@ export class FormDetector {
       }));
     if (
       !visible ||
-      element.disabled ||
+      observeControl(element).disabled ||
       ('readOnly' in element && element.readOnly && !isCombobox)
     ) {
       return;
@@ -89,6 +86,9 @@ export class FormDetector {
 
     // 提取元素标识符
     const identifiers = FieldMatcher.extractIdentifiers(element);
+    identifiers.labelText = identifiers.labelText || getControlLabel(element);
+    const rangePart = dateRangePart(element);
+    if (rangePart) identifiers.labelText += rangePart === 'start' ? ' 开始时间' : ' 结束时间';
     if (isChoiceControl(element)) {
       const question = getChoiceQuestion(element);
       identifiers.labelText = question || identifiers.labelText;
@@ -110,8 +110,9 @@ export class FormDetector {
       this.detectedFields.push({
         element,
         fieldType,
+        label: identifiers.labelText,
         confidence,
-        value: element.value
+        value: observeControl(element).value
       });
     } else {
       this.unmatchedFields.push({ element, identifiers });
@@ -145,7 +146,8 @@ export class FormDetector {
                 element.tagName === 'INPUT' ||
                 element.tagName === 'TEXTAREA' ||
                 element.tagName === 'SELECT' ||
-                element.querySelector('input, textarea, select')
+                element.matches('[role=combobox], [role=radio], [role=checkbox], [contenteditable=true]') ||
+                element.querySelector('input, textarea, select, [role=combobox], [role=radio], [role=checkbox], [contenteditable=true]')
               ) {
                 shouldRedetect = true;
                 break;

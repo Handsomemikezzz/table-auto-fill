@@ -7,6 +7,17 @@ function match(name: string, context = ''): FieldType {
   return FieldMatcher.matchFieldType(name, '', '', '', 'text', '', context).fieldType;
 }
 
+test('共享 start_end_time 名称不能盖过明确的日期端点标签', () => {
+  const identify = (label: string, context: string) => FieldMatcher.matchFieldType(
+    'start_end_time', 'formily-item-start_end_time', '', label, 'text', '', context,
+  ).fieldType;
+  assert.equal(identify('起止时间 开始时间', '教育经历 无准确的毕业时间可填写预计毕业时间'), FieldType.EDUCATION_START_DATE);
+  assert.equal(identify('起止时间 结束时间', '教育经历'), FieldType.GRADUATION_DATE);
+  assert.equal(identify('起止时间 开始时间', '工作经历'), FieldType.START_DATE);
+  assert.equal(identify('起止时间 结束时间', '工作经历'), FieldType.END_DATE);
+  assert.equal(identify('起止时间', '教育经历'), FieldType.UNKNOWN);
+});
+
 test('字段匹配使用词边界，避免通用 id/job/contact 子串误判', () => {
   assert.equal(match('contactEmail'), FieldType.EMAIL);
   assert.equal(match('candidate_id'), FieldType.UNKNOWN);

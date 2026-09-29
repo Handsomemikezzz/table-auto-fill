@@ -64,6 +64,24 @@ function createProfile(): UserProfile {
   };
 }
 
+test('视觉整组结果也拒绝跨经历混填和不符合本地语义的资料路径', () => {
+  const payload = createPayload();
+  const template = payload.controls[0];
+  payload.controls = [
+    { ...template, controlId: 'school', label: '学校', name: 'school', options: [], semantic: 'school', blockId: 'edu' },
+    { ...template, controlId: 'major', label: '专业', name: 'major', options: [], semantic: 'major', blockId: 'edu' },
+  ];
+  const profile = createProfile();
+  profile.education.push({ ...profile.education[0], id: 'edu-2', school: 'C', major: 'D' });
+  assert.deepEqual(validateVisualRegionMappings([
+    { controlId: 'school', fieldMeaning: '学校', matchedProfilePath: 'education.0.school', value: 'A' },
+    { controlId: 'major', fieldMeaning: '专业', matchedProfilePath: 'education.1.major', value: 'D' },
+  ], payload, profile), []);
+  assert.deepEqual(validateVisualRegionMappings([
+    { controlId: 'school', fieldMeaning: '学校', matchedProfilePath: 'education.0.major', value: 'B' },
+  ], payload, profile), []);
+});
+
 test('视觉补填 prompt 包含图片 block 与只允许输出已有 controlId 的规则', () => {
   const prompt = buildVisualRegionFillPrompt(
     createPayload(),

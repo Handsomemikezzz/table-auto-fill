@@ -1,3 +1,7 @@
+import { findFormSectionHeading } from '../utils/formContext.ts';
+import type { GroundedMapping } from '../services/llm/fieldMapping.ts';
+import { discoverControls, observeControl, getControlLabel, getOptions } from './controlObservation.ts';
+import { dateRangePart, findRecordContainer, recordSection, bindFieldRecords } from './fieldBinding.ts';
 import { FormDetector, type UnmatchedField } from './formDetector';
 import { FormFiller, type FillFailure, type FillSection } from './formFiller';
 import { OpenQuestionDetector } from './openQuestionDetector';
@@ -8,12 +12,10 @@ import {
   getControlOptions,
   getLogicalControlValue,
   isChoiceControl,
-  isLogicalChoiceRepresentative,
 } from './controlSemantics';
 import { extractApplicationPageMetadata } from './applicationRecordMetadata.ts';
 import { createVisualRegionFillController } from './visualRegionFill.ts';
 import { createInfoOverlayController } from './infoOverlay.ts';
-import { runProgressiveFill } from './progressiveFill.ts';
 import { findCustomInformationValue } from '../shared/learnedFields.ts';
 import { getChineseFieldLabel } from '../shared/fieldLabels.ts';
 import { buildProfileForResume, resolveResumeSelection } from '../shared/resumes.ts';
@@ -49,15 +51,30 @@ const visualRegionFillController = createVisualRegionFillController({
     shouldContinue,
   ),
   onFillComplete: () => showFailureReview(formFiller.getLastFailures()),
+  verifyFilled: () => formFiller.revalidate(),
+  onSessionStateChange: active => {
+    visualFillRunning = active;
+    if (active) formFiller.beginFillSession();
+  },
+  describeFields: elements => {
+    const fields = formDetector.detectFields();
+    const meanings = new Map(fields.map(field => [field.element, field]));
+    const identities = new Map(elements.map(element => [element, FieldMatcher.extractIdentifiers(element).labelText]));
+    const groups = new Map<HTMLElement, string>();
+    return new Map(elements.map(element => {
+      const field = meanings.get(element);
+      const group = field && recordSection(field.fieldType) ? findRecordContainer(field, fields) : findLogicalFormBlock(element, elements, identities);
+      if (!groups.has(group)) groups.set(group, `visual-block-${groups.size}`);
+      return [element, { semantic: field?.fieldType, blockId: groups.get(group) }];
+    }));
+  },
 });
 let detectedFields: DetectedField[] = [];
 let fillPreviewSnapshot: { fields: DetectedField[]; createdAt: number } | null = null;
 let aiPageFillRunning = false;
-let lastFocusedControl:
-  | HTMLInputElement
-  | HTMLTextAreaElement
-  | HTMLSelectElement
-  | null = null;
+let localFillRunning = false;
+let visualFillRunning = false;
+let lastFocusedControl: HTMLElement | null = null;
 
 const infoOverlayController = createInfoOverlayController({
   getProfile: async resumeId => {
@@ -93,39 +110,15 @@ document.addEventListener('focusin', (event) => {
   }
 }, true);
 
-function isWritableControl(
-  target: EventTarget | null
-): target is HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement {
-  if (
-    !(target instanceof HTMLInputElement) &&
-    !(target instanceof HTMLTextAreaElement) &&
-    !(target instanceof HTMLSelectElement)
-  ) {
-    return false;
-  }
-  if (target.disabled) return false;
-
-  if (target instanceof HTMLInputElement) {
-    const unsupportedTypes = new Set([
-      'hidden',
-      'file',
-      'button',
-      'submit',
-      'reset',
-      'image',
-    ]);
-    if (unsupportedTypes.has(target.type.toLowerCase())) return false;
-    if (target.readOnly) {
-      return target.getAttribute('role') === 'combobox'
-        || Boolean(target.closest('.ant-picker, .el-date-editor, .arco-picker, .semi-datepicker, [data-picker]'));
-    }
-  }
-
-  if (target instanceof HTMLTextAreaElement && target.readOnly) return false;
-  return true;
+function isWritableControl(target: EventTarget | null): target is HTMLElement {
+  if (!(target instanceof HTMLElement)) return false;
+  const observed = observeControl(target);
+  return !observed.disabled && observed.kind !== 'unsupported'
+    && (!observed.readOnly || observed.kind === 'combobox' || Boolean(target.closest('.ant-picker, .el-date-editor, [data-picker]')));
 }
 
 async function applyValueToFocusedControl(value: string): Promise<FocusedFieldWriteResult> {
+  if (aiPageFillRunning || localFillRunning || visualFillRunning) return { written: false, reason: 'FILL_IN_PROGRESS' };
   // 主页面当前聚焦的是 iframe 时，不使用主页面残留的旧字段，让后台继续到子 frame 查找。
   if (document.activeElement instanceof HTMLIFrameElement) {
     return { written: false, reason: 'NO_FOCUSED_FIELD' };
@@ -180,7 +173,7 @@ async function handleFillButtonClick(reusePreview = false, resumeId?: string | n
 }
 
 async function handleAIPageFill(resumeId?: string | null) {
-  if (aiPageFillRunning) {
+  if (aiPageFillRunning || localFillRunning || visualFillRunning) {
     showAIRegionStatus('AI 渐进补填已经在运行中').update('AI 渐进补填已经在运行中', 'warning');
     return;
   }
@@ -211,21 +204,24 @@ async function handleAIPageFill(resumeId?: string | null) {
     }
     const fillProfile = buildProfileForResume(response.data, resumeId);
 
-    await formFiller.prepareDynamicSections(fillProfile, 'all');
+    if (cancelled) return;
+    await formFiller.prepareDynamicSections(fillProfile, 'all', () => !cancelled);
+    if (cancelled) return;
     formFiller.beginFillSession();
     detectedFields = formDetector.detectFields();
-    const initiallyEmptyFields = collectPageScanFields();
     const learnedValues = await getLearnedFieldValues();
+    if (cancelled) return;
 
     // AI 只处理本地规则无法确定的字段。姓名、邮箱、学历、经历等已识别
     // 字段先直接填写，避免把整份资料反复发送给模型。
     status.update('正在用本地资料快速填写已识别字段...');
     const locallyMatchedFields = detectedFields.filter(field => (
-      !getControlValue(field.element) && isLikelyApplicationControl(field.element)
+      isLikelyApplicationControl(field.element)
     ));
-    await formFiller.fillForm(locallyMatchedFields, fillProfile, learnedValues);
+    await formFiller.fillForm(locallyMatchedFields, fillProfile, learnedValues, () => !cancelled);
+    if (cancelled) return;
     let scannedFields = collectPageScanFields();
-    filledCount = Math.max(0, initiallyEmptyFields.length - scannedFields.length);
+    filledCount = formFiller.getVerifiedCount();
 
     const learnedFillItems = scannedFields.flatMap(field => {
       const learned = learnedValues[formFiller.getFieldSignature(field.element)];
@@ -237,15 +233,20 @@ async function handleAIPageFill(resumeId?: string | null) {
       filledCount += await formFiller.fillElementValues(learnedFillItems, () => !cancelled);
       scannedFields = collectPageScanFields();
     }
+    if (cancelled) return;
     const selectedResume = resolveResumeSelection(response.data, resumeId);
     const fileInputs = formDetector.findFileInputs();
     if (selectedResume) {
       for (const fileInput of fileInputs) {
+        if (cancelled) return;
         await formFiller.uploadResume(fileInput, selectedResume.fileData, selectedResume.fileName);
         uploadedResumeCount++;
       }
     }
+    if (cancelled) return;
     if (scannedFields.length === 0) {
+      filledCount = await formFiller.revalidate();
+      if (cancelled) return;
       status.update(
         filledCount > 0 || uploadedResumeCount > 0
           ? `已填 ${filledCount} 项${uploadedResumeCount > 0 ? `，上传简历 ${uploadedResumeCount} 处` : ''}`
@@ -257,7 +258,7 @@ async function handleAIPageFill(resumeId?: string | null) {
     }
 
     const aiFieldCount = scannedFields.length;
-    status.update(`AI 将逐项补填 ${aiFieldCount} 个剩余字段，已完成 ${filledCount} 项...`);
+    status.update(`AI 将按字段组补填 ${aiFieldCount} 个剩余字段，已完成 ${filledCount} 项...`);
     filledCount += await fillPageScanProgressively(
       'other',
       scannedFields,
@@ -269,6 +270,7 @@ async function handleAIPageFill(resumeId?: string | null) {
           `AI 补填 ${processedCount}/${aiFieldCount}：${label || '未命名字段'}；累计已填 ${filledCount + aiFilledCount} 项`,
         );
       },
+      fillProfile,
     );
 
     if (cancelled) return;
@@ -281,6 +283,8 @@ async function handleAIPageFill(resumeId?: string | null) {
       formFiller.markUnresolvedField(candidate.element, candidate.label);
     }
 
+    filledCount = await formFiller.revalidate();
+    if (cancelled) return;
     status.update(
       `AI 扫描填充完成：已填 ${filledCount} 项${uploadedResumeCount > 0 ? `，上传简历 ${uploadedResumeCount} 处` : ''}`,
       'success',
@@ -311,6 +315,8 @@ async function fillSection(
   section: FillSection,
   options: { reusePreview?: boolean; resumeId?: string | null } = {},
 ) {
+  if (localFillRunning || aiPageFillRunning || visualFillRunning) return;
+  localFillRunning = true;
   try {
     // 获取用户资料
     const response = await sendRuntimeMessage<UserProfile>({
@@ -355,7 +361,7 @@ async function fillSection(
     const learnedUnmatchedCount = await formFiller.fillElementValues(learnedUnmatchedItems);
 
     const fieldsToFill = filterFieldsBySection(detectedFields, section)
-      .filter(field => !getControlValue(field.element) && isLikelyApplicationControl(field.element));
+      .filter(field => isLikelyApplicationControl(field.element));
     const selectedResume = resolveResumeSelection(response.data, options.resumeId);
     const fileInputs = formDetector.findFileInputs();
 
@@ -402,6 +408,8 @@ async function fillSection(
   } catch (error) {
     console.error('Fill form error:', error);
     alert('填充表单时出错，请查看控制台了解详情');
+  } finally {
+    localFillRunning = false;
   }
 }
 
@@ -412,52 +420,29 @@ function filterFieldsBySection(fields: DetectedField[], section: FillSection): D
 }
 
 function getElementSection(element: Element): FillSection | null {
-  const module = element.closest<HTMLElement>('[class*=applyFormModuleWrapper], section, fieldset, [role="group"]');
-  const text = (module?.textContent || '').replace(/\s+/g, ' ').toLowerCase();
-
-  if (/基本信息|personal information|contact information/.test(text)) return 'personal';
-  if (/教育经历|教育背景|education/.test(text)) return 'education';
-  if (/实习经历|工作经历|work experience|employment/.test(text)) return 'experience';
-  if (/项目经历|project experience|projects/.test(text)) return 'projects';
-
+  const text = findFormSectionHeading(element);
+  if (/基本信息|个人信息|personal information|contact information/i.test(text)) return 'personal';
+  if (/教育经历|教育背景|本科|硕士|博士|education/i.test(text)) return 'education';
+  if (/实习经历|工作经历|work experience|employment/i.test(text)) return 'experience';
+  if (/项目经历|project experience|projects/i.test(text)) return 'projects';
   return null;
 }
 
 function startAIRegionSelection() {
-  formFiller.beginFillSession();
+  if (aiPageFillRunning || localFillRunning || visualFillRunning) return;
   visualRegionFillController.beginVisualRegionFill();
 }
 
 type ScannedPageField = PageScanField & {
-  element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+  element: HTMLElement;
 };
 
 function collectPageScanFields(): ScannedPageField[] {
-  const roots: ParentNode[] = [document];
-  for (let index = 0; index < roots.length; index++) {
-    for (const host of Array.from(roots[index].querySelectorAll('*'))) {
-      if (host.matches('[data-job-applymate-ui], [data-job-applymate-overlay]')) continue;
-      if (host.shadowRoot && !roots.includes(host.shadowRoot)) roots.push(host.shadowRoot);
-    }
-  }
-  const elements = roots.flatMap(root => Array.from(
-    root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
-      'input:not([type="hidden"]):not([type="file"]):not([type="password"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]):not([type="range"]):not([type="color"]), textarea, select',
-    ),
-  )).filter(element => {
+  const elements = discoverControls(document).filter(element => {
     const root = element.getRootNode();
-    if (
-      root instanceof ShadowRoot
-      && root.host.matches('[data-job-applymate-ui], [data-job-applymate-overlay]')
-    ) return false;
-    if (!isLogicalChoiceRepresentative(element)) return false;
-    const visible = element.getClientRects().length > 0
-      || (isChoiceControl(element) && getControlOptions(element).length > 0);
-    if (!visible || element.disabled) return false;
-    if ('readOnly' in element && element.readOnly && element.getAttribute('role') !== 'combobox') {
-      return false;
-    }
-    return !getControlValue(element) && isLikelyApplicationControl(element);
+    if (element.closest('[data-job-applymate-ui], [data-job-applymate-overlay]') || (root instanceof ShadowRoot && root.host.matches('[data-job-applymate-ui], [data-job-applymate-overlay]'))) return false;
+    const observed = observeControl(element);
+    return !observed.disabled && !getControlValue(element) && isLikelyApplicationControl(element);
   });
   const blockIds = new WeakMap<HTMLElement, string>();
   const blockRows = new Map<PageScanSection, Map<HTMLElement, number>>();
@@ -484,14 +469,17 @@ function collectPageScanFields(): ScannedPageField[] {
       ''
     ).trim();
     const identifiers = FieldMatcher.extractIdentifiers(element);
-    const label = (
+    const baseLabel = (
       (isChoiceControl(element) ? getChoiceQuestion(element) : '') ||
       element.getAttribute('data-form-field-i18n-name') ||
       container?.getAttribute('data-form-field-i18n-name') ||
       identifiers.labelText ||
+      getControlLabel(element) ||
       identifiers.placeholder ||
       ''
     ).trim();
+    const rangePart = dateRangePart(element);
+    const label = baseLabel + (rangePart === 'start' ? ' 开始时间' : rangePart === 'end' ? ' 结束时间' : '');
     const section = toPageScanSection(getElementSection(element));
     const block = findLogicalFormBlock(element, elements, fieldIdentities);
     let blockId = blockIds.get(block);
@@ -502,12 +490,7 @@ function collectPageScanFields(): ScannedPageField[] {
     const rows = blockRows.get(section) || new Map<HTMLElement, number>();
     if (!blockRows.has(section)) blockRows.set(section, rows);
     if (!rows.has(block)) rows.set(block, rows.size);
-    const dateInputs = isDateRangeControl(name, label) && container
-      ? Array.from(container.querySelectorAll('input:not([type="hidden"]), textarea, select'))
-        .sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left)
-      : [];
-    const datePosition = dateInputs.indexOf(element);
-    const isDateRange = dateInputs.length > 0;
+    const isDateRange = Boolean(rangePart);
     const context = `${getPageSectionName(section)}；${(container?.textContent || element.parentElement?.textContent || '')
       .replace(/\s+/g, ' ')
       .trim()
@@ -520,12 +503,15 @@ function collectPageScanFields(): ScannedPageField[] {
       section,
       name,
       label,
+      optionCandidates: getOptions(element).map(({ element: _element, ...option }) => option),
+      optionsComplete: observeControl(element).optionsComplete,
       type: isDateRange
-        ? (datePosition === 1 ? 'date-end' : 'date-start')
+        ? (rangePart === 'end' ? 'date-end' : 'date-start')
         : isChoiceControl(element)
           ? element.type
           : (element.getAttribute('role') === 'combobox' ? 'combobox' : element.tagName.toLowerCase()),
       options: getKnownOptions(element, label, name),
+      semantic: FieldMatcher.matchFieldType(identifiers.name, identifiers.id, identifiers.placeholder, label, identifiers.type, identifiers.autocomplete, identifiers.contextText).fieldType,
       context,
       blockId,
       blockContext: `${getPageSectionName(section)}；${(block.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 500)}`,
@@ -534,7 +520,7 @@ function collectPageScanFields(): ScannedPageField[] {
 }
 
 function isLikelyApplicationControl(
-  element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
+  element: HTMLElement,
 ): boolean {
   const identifiers = FieldMatcher.extractIdentifiers(element);
   const semanticText = `${identifiers.name} ${identifiers.labelText} ${identifiers.placeholder} ${identifiers.contextText}`
@@ -544,14 +530,17 @@ function isLikelyApplicationControl(
   const utilityWords = /搜索|查询|验证码|订阅|登录|注册|search|captcha|newsletter|sign\s*in|log\s*in/i;
   if (utilityWords.test(semanticText) && !applicationWords.test(semanticText)) return false;
   if (getElementSection(element)) return true;
-  if (element.required || element.getAttribute('aria-required') === 'true') return true;
+  const meaning = FieldMatcher.matchFieldType(identifiers.name, identifiers.id, identifiers.placeholder,
+    identifiers.labelText || getControlLabel(element), identifiers.type, identifiers.autocomplete, identifiers.contextText);
+  if (meaning.fieldType !== 'unknown' && meaning.confidence >= 0.8 && element.closest('form')) return true;
+  if (element.hasAttribute('required') || element.getAttribute('aria-required') === 'true') return true;
   if (element.closest(
     '[data-form-field-id], [data-form-field-name], [data-form-field-i18n-name], [class*=applyForm], [class*=formItem], [class*=form-item]'
   )) return true;
   const form = element.closest('form');
   if (!form) return false;
   const formText = (form.textContent || '').replace(/\s+/g, ' ').slice(0, 3000);
-  const controlCount = form.querySelectorAll('input:not([type="hidden"]), textarea, select').length;
+  const controlCount = form.querySelectorAll('input:not([type="hidden"]), textarea, select, [role=combobox], [role=radio], [role=checkbox], [contenteditable=true]').length;
   return controlCount >= 2 && applicationWords.test(`${formText} ${semanticText}`);
 }
 
@@ -561,22 +550,22 @@ function getUnmatchedFieldLabel(unmatched: UnmatchedField): string {
 
 function collectUnresolvedReviewCandidates(
   items: Array<{
-    element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+    element: HTMLElement;
     preferredLabel?: string;
   }>,
 ): Array<{
-  element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+  element: HTMLElement;
   label: string;
 }> {
   const seenContainers = new Set<Element>();
   const candidates: Array<{
-    element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+    element: HTMLElement;
     label: string;
   }> = [];
 
   for (const item of items) {
     const { element } = item;
-    if (!element.isConnected || element.disabled || getControlValue(element)) continue;
+    if (!element.isConnected || observeControl(element).disabled || getControlValue(element)) continue;
     // 失败复盘关注所有有明确问题名称的网申字段，不再只依赖 required 标记。
     // 很多招聘系统会在提交时才校验必填，DOM 中并没有 required 属性。
     if (!isLikelyApplicationControl(element)) continue;
@@ -594,7 +583,7 @@ function collectUnresolvedReviewCandidates(
 }
 
 function getReviewControlContainer(
-  element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
+  element: HTMLElement,
 ): Element {
   if (isChoiceControl(element)) {
     return element.closest('[role="radiogroup"], [role="group"], fieldset')
@@ -608,7 +597,7 @@ function getReviewControlContainer(
 }
 
 function getMeaningfulReviewLabel(
-  element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
+  element: HTMLElement,
   preferredLabel = '',
 ): string {
   const identifiers = FieldMatcher.extractIdentifiers(element);
@@ -649,9 +638,9 @@ function getMeaningfulReviewLabel(
 }
 
 function findLogicalFormBlock(
-  element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
-  allElements: Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
-  fieldIdentities: Map<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, string>,
+  element: HTMLElement,
+  allElements: Array<HTMLElement>,
+  fieldIdentities: Map<HTMLElement, string>,
 ): HTMLElement {
   let current: HTMLElement | null = element.parentElement;
   let best = element.parentElement || document.body;
@@ -671,12 +660,8 @@ function findLogicalFormBlock(
   return best;
 }
 
-function getControlValue(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement): string {
+function getControlValue(element: HTMLElement): string {
   return getLogicalControlValue(element);
-}
-
-function isDateRangeControl(name: string, label: string): boolean {
-  return name === 'start_end_time' || label === '起止时间';
 }
 
 function toPageScanSection(section: FillSection | null): PageScanSection {
@@ -700,62 +685,54 @@ async function fillPageScanProgressively(
   resumeId: string | null | undefined,
   shouldContinue: () => boolean,
   onProgress: (progress: { processedCount: number; filledCount: number; label: string }) => void,
+  profile: UserProfile,
 ): Promise<number> {
-  const orderedFields = [...fields]
-    .sort((a, b) => {
-      const requiredPriority = Number(!isRequiredControl(a.element)) - Number(!isRequiredControl(b.element));
-      return requiredPriority
-        || getDateRangeFillPriority(a.element) - getDateRangeFillPriority(b.element);
+  const blocks = new Map<string, ScannedPageField[]>();
+  const bindings = bindFieldRecords(formDetector.detectFields(), profile);
+  for (const field of fields) {
+    const binding = bindings.get(field.element) || [...bindings.values()]
+      .filter(candidate => candidate.container.contains(field.element))
+      .sort((left, right) => left.container.contains(right.container) ? 1 : -1)[0];
+    if (binding) {
+      field.recordId = binding.recordId;
+      field.recordCollection = binding.section;
+      field.blockId = `${binding.section}:${binding.recordId}`;
+    }
+    const key = field.blockId || `field-${field.index}`;
+    blocks.set(key, [...(blocks.get(key) || []), field]);
+  }
+  let processedCount = 0;
+  let filledCount = 0;
+  for (const block of blocks.values()) {
+    if (!shouldContinue()) break;
+    const active = block.filter(field => field.element.isConnected && !getControlValue(field.element));
+    if (!active.length) continue;
+    const response = await sendRuntimeMessage<Record<string, GroundedMapping>>({
+      type: 'AI_FILL_SECTION',
+      payload: {
+        requestId, resumeId, section: active[0].section || section, domain: window.location.hostname,
+        fields: active.map(({ element: _element, section: _section, ...field }) => field),
+      },
     });
-  const result = await runProgressiveFill({
-    items: orderedFields,
-    shouldContinue,
-    resolveValue: async field => {
-      if (!field.element.isConnected || getControlValue(field.element)) return null;
-      const response = await sendRuntimeMessage<Record<string, string>>({
-        type: 'AI_FILL_SECTION',
-        payload: {
-          requestId,
-          resumeId,
-          section,
-          domain: window.location.hostname,
-          fields: [{
-            index: field.index,
-            rowIndex: field.rowIndex,
-            name: field.name,
-            label: field.label,
-            type: field.type,
-            options: field.options,
-            context: field.context,
-            blockId: field.blockId,
-            blockContext: field.blockContext,
-          }],
-        },
-      });
-      if (!response.success || !response.data) {
-        throw new Error(response.error || 'AI 未返回当前字段的结果');
+    if (!shouldContinue()) break;
+    const ordered = [...active].sort((a, b) => getDateRangeFillPriority(a.element) - getDateRangeFillPriority(b.element));
+    for (const field of ordered) {
+      if (!shouldContinue()) break;
+      const mapping = response.success ? response.data?.[String(field.index)] : undefined;
+      if (mapping && field.element.isConnected && !getControlValue(field.element)) {
+        filledCount += await formFiller.fillElementValues([{
+          element: field.element, value: mapping.value, optionRef: mapping.optionId, semantic: field.semantic,
+        }], shouldContinue);
+      } else if (!getControlValue(field.element)) {
+        for (const candidate of collectUnresolvedReviewCandidates([{ element: field.element, preferredLabel: field.label }])) {
+          formFiller.markUnresolvedField(candidate.element, candidate.label);
+        }
       }
-      return response.data[String(field.index)] || null;
-    },
-    applyValue: async (field, value) => {
-      if (!field.element.isConnected || getControlValue(field.element)) return false;
-      return await formFiller.fillElementValues(
-        [{ element: field.element, value }],
-        shouldContinue,
-      ) > 0;
-    },
-    onProgress: progress => onProgress({
-      processedCount: progress.processedCount,
-      filledCount: progress.filledCount,
-      label: progress.item.label,
-    }),
-  });
-
-  return result.filledCount;
-}
-
-function isRequiredControl(element: Element): boolean {
-  return element.hasAttribute('required') || element.getAttribute('aria-required') === 'true';
+      processedCount++;
+      onProgress({ processedCount, filledCount, label: field.label });
+    }
+  }
+  return filledCount;
 }
 
 function showAIRegionStatus(initialText: string) {
@@ -795,51 +772,13 @@ function showAIRegionStatus(initialText: string) {
   };
 }
 
-function getKnownOptions(
-  element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
-  label: string,
-  name: string,
-): string[] {
-  const semanticOptions = getControlOptions(element);
-  if (semanticOptions.length > 0) return semanticOptions;
-  if (element instanceof HTMLSelectElement) {
-    return Array.from(element.options)
-      .filter(option => !option.disabled && Boolean(option.value || option.text.trim()))
-      .map(option => option.text.trim())
-      .filter(Boolean);
-  }
-  const controlledId = element.getAttribute('aria-controls') || element.getAttribute('aria-owns');
-  if (controlledId) {
-    const controlled = document.getElementById(controlledId);
-    const options = Array.from(controlled?.querySelectorAll<HTMLElement>('[role="option"]') || [])
-      .map(option => (option.textContent || '').trim()).filter(Boolean);
-    if (options.length > 0) return options;
-  }
-  if (label === '学历类型' || label === '学习形式' || name === 'education_type') {
-    return ['海外及港澳台', '统招全日制', '统招非全日制', '自考', '其他'];
-  }
-  if (label === '学历' || name === 'degree') {
-    return ['高中', '专科', '本科', '硕士研究生', '博士研究生'];
-  }
-  if (label.includes('学位') || name === 'academic_degree') {
-    return ['无', '学士', '硕士', '博士'];
-  }
-  if (label.includes('政治面貌') || label.includes('政治状态') || name === 'political_status') {
-    return ['中共党员', '中共预备党员', '共青团员', '群众', '民主党派', '无党派人士'];
-  }
-  return [];
+function getKnownOptions(element: HTMLElement, _label: string, _name: string): string[] {
+  return getControlOptions(element);
 }
 
 function getDateRangeFillPriority(element: Element): number {
-  const container = element.closest<HTMLElement>(
-    '[data-form-field-id="start_end_time"], [data-form-field-name="start_end_time"], [data-form-field-i18n-name="起止时间"]'
-  );
-  if (!container) return 2;
-
-  const inputs = Array.from(
-    container.querySelectorAll('input:not([type="hidden"]), textarea, select')
-  ).sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
-  return inputs.indexOf(element) === 1 ? 0 : 1;
+  const part = dateRangePart(element as HTMLElement);
+  return part === 'end' ? 0 : part === 'start' ? 1 : 2;
 }
 
 // 注入 AI 生成按钮到开放性问题旁
@@ -851,6 +790,7 @@ function injectAIButtons() {
     if (field.element.parentElement?.querySelector('.ai-gen-btn')) continue;
 
     const btn = document.createElement('button');
+    btn.type = 'button';
     btn.className = 'ai-gen-btn';
     btn.textContent = 'AI 生成';
     btn.style.cssText = `
@@ -863,6 +803,8 @@ function injectAIButtons() {
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
       e.stopPropagation();
+      if (localFillRunning || aiPageFillRunning || visualFillRunning) return;
+      const originalValue = field.element.value;
       btn.textContent = '生成中...';
       (btn as HTMLButtonElement).disabled = true;
 
@@ -877,21 +819,13 @@ function injectAIButtons() {
       });
 
       if (response.success && response.data) {
-        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-          window.HTMLTextAreaElement.prototype, 'value'
-        )?.set || Object.getOwnPropertyDescriptor(
-          window.HTMLInputElement.prototype, 'value'
-        )?.set;
-
-        if (nativeInputValueSetter) {
-          nativeInputValueSetter.call(field.element, response.data.answer);
+        if (localFillRunning || aiPageFillRunning || visualFillRunning || field.element.value !== originalValue) {
+          btn.textContent = '内容已变化，请重新生成';
         } else {
-          field.element.value = response.data.answer;
+          const written = await formFiller.fillFocusedControl(field.element, response.data.answer);
+          btn.textContent = written ? 'AI 生成 ✓' : '网页尚未接受，请重试';
+          if (written) field.element.style.border = '2px solid #667eea';
         }
-        field.element.dispatchEvent(new Event('input', { bubbles: true }));
-        field.element.dispatchEvent(new Event('change', { bubbles: true }));
-        field.element.style.border = '2px solid #667eea';
-        btn.textContent = 'AI 生成 ✓';
       } else {
         btn.textContent = '生成失败';
         console.error('Generation failed:', response.error);
@@ -966,7 +900,8 @@ function showFailureReview(failures: FillFailure[]): void {
     const row = document.createElement('div');
     const label = document.createElement('div');
     const reason = document.createElement('div');
-    const options = formFiller.getCorrectionOptions(failure.element);
+    const candidates = formFiller.getCorrectionCandidates(failure.element);
+    const options = candidates.map(option => option.label);
     const input = options.length > 0
       ? document.createElement('select')
       : document.createElement('input');
@@ -982,22 +917,23 @@ function showFailureReview(failures: FillFailure[]): void {
     row.style.cssText = 'padding:12px;border:1px solid #d5e6e1;border-radius:12px;background:#fff;';
     label.textContent = failure.label || failure.fieldType;
     label.style.cssText = 'margin-bottom:7px;font-weight:700;color:#163b43;';
-    reason.textContent = failure.attemptedValue
+    reason.textContent = failure.outcome?.reason || (failure.attemptedValue
       ? `已尝试“${failure.attemptedValue.slice(0, 80)}”，但网页没有接受。`
-      : '个人资料中没有找到这个问题的答案，请补充。';
+      : '未找到可靠的资料或字段对应关系，请补充或选择。');
     reason.style.cssText = 'margin:-2px 0 8px;color:#607477;font-size:12px;';
     if (input instanceof HTMLSelectElement) {
       const placeholder = document.createElement('option');
       placeholder.value = '';
       placeholder.textContent = '请选择网站中的选项';
       input.appendChild(placeholder);
-      for (const optionText of options) {
+      for (const candidate of candidates) {
         const option = document.createElement('option');
-        option.value = optionText;
-        option.textContent = optionText;
+        option.value = candidate.id;
+        option.textContent = candidate.label;
         input.appendChild(option);
       }
-      input.value = options.includes(failure.attemptedValue) ? failure.attemptedValue : '';
+      const matching = candidates.filter(option => option.label === failure.attemptedValue);
+      input.value = matching.length === 1 ? matching[0].id : '';
     } else {
       input.value = failure.attemptedValue;
       input.placeholder = `请输入“${failure.label || '该字段'}”的答案`;
@@ -1055,7 +991,12 @@ function showFailureReview(failures: FillFailure[]): void {
       saveHint.textContent = saved.success ? '识别纠错已保存' : '重新保存识别纠错';
     };
     remember.onclick = async () => {
-      const value = input.value.trim();
+      if (localFillRunning || aiPageFillRunning || visualFillRunning) {
+        feedback.textContent = '正在填写，请完成或停止后再处理这一项';
+        return;
+      }
+      const selected = input instanceof HTMLSelectElement ? candidates.find(option => option.id === input.value) : undefined;
+      const value = selected?.label || input.value.trim();
       if (!value) {
         feedback.textContent = '请先输入准备填写的值';
         feedback.style.marginTop = '7px';
@@ -1063,9 +1004,9 @@ function showFailureReview(failures: FillFailure[]): void {
       }
       remember.disabled = true;
       remember.textContent = '正在填写...';
-      const count = await formFiller.fillElementValues([{ element: failure.element, value }]);
+      const count = await formFiller.fillElementValues([{ element: failure.element, value, overwrite: true, semantic: failure.fieldType, optionRef: selected?.id }]);
       if (count === 0) {
-        feedback.textContent = '仍未写入，请填写网站下拉选项中显示的准确文字后重试';
+        feedback.textContent = formFiller.getLastFailures().find(item => item.element === failure.element)?.outcome?.reason || '控件尚未接受此值，可在原网页手动选择后继续';
         feedback.style.marginTop = '7px';
         remember.disabled = false;
         remember.textContent = '再次尝试';
@@ -1084,7 +1025,8 @@ function showFailureReview(failures: FillFailure[]): void {
           },
           // attemptedValue 为空说明资料中原本没有答案；同时写回个人资料，
           // 让其它网站和后续 AI 请求也能复用，而不只绑定当前字段签名。
-          saveAsProfileInformation: !failure.attemptedValue,
+          saveAsProfileInformation: failure.outcome?.status === 'needs-data'
+            || (!failure.attemptedValue && failure.fieldType === 'unknown'),
           recognitionHint: ruleInput.value.trim() || undefined,
         },
       });
@@ -1097,7 +1039,16 @@ function showFailureReview(failures: FillFailure[]): void {
       }
       removeRow();
     };
-    actions.append(remember, skip);
+    const locate = document.createElement('button');
+    locate.type = 'button';
+    locate.textContent = '在网页中处理';
+    locate.style.cssText = skip.style.cssText;
+    locate.onclick = () => {
+      failure.element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      failure.element.focus();
+      failure.element.animate([{ outline: '3px solid #0f766e' }, { outline: '3px solid transparent' }], { duration: 1800 });
+    };
+    actions.append(remember, locate, skip);
     row.append(label, reason, input, actions, ruleLabel, ruleInput, saveHint, feedback);
     list.append(row);
   }
@@ -1134,7 +1085,7 @@ function showSuccessMessage() {
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <polyline points="20 6 9 17 4 12"></polyline>
     </svg>
-    <span>表单填充成功！</span>
+    <span>已验证填写 ${formFiller.getVerifiedCount()} 项${formFiller.getLastFailures().length ? `，${formFiller.getLastFailures().length} 项需要处理` : ''}</span>
   `;
 
   document.body.appendChild(message);
@@ -1200,7 +1151,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       Boolean(message.payload?.reusePreview),
       message.payload?.resumeId,
     ).then(() => {
-      sendResponse({ success: true });
+      sendResponse({ success: true, data: { verifiedCount: formFiller.getVerifiedCount(), failures: formFiller.getLastFailures().map(item => ({ label: item.label, status: item.outcome?.status || 'unresolved' })) } });
     }).catch((error) => {
       sendResponse({ success: false, error: error.message });
     });
@@ -1233,6 +1184,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'UNDO_LAST_FILL') {
+    if (localFillRunning || aiPageFillRunning || visualFillRunning) {
+      sendResponse({ success: false, error: '正在填写，请完成或停止后再撤销' });
+      return true;
+    }
     formFiller.undoLastFill().then((count) => {
       sendResponse({ success: true, data: { count } });
     }).catch((error) => {

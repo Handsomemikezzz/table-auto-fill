@@ -224,7 +224,9 @@ export function createInfoOverlayController(options: {
         showStatus(`已写入“${label}”`, 'success');
         return;
       }
-      const reason = result.reason === 'NO_FOCUSED_FIELD'
+      const reason = result.reason === 'FILL_IN_PROGRESS'
+        ? '正在自动填写，请完成或停止后再填写当前字段'
+        : result.reason === 'NO_FOCUSED_FIELD'
         ? '请先点击网页中的目标输入框'
         : result.reason === 'FIELD_DETACHED'
           ? '网页字段已刷新，请重新点击后再试'

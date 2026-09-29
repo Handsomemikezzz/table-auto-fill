@@ -1,3 +1,4 @@
+import type { ControlOption } from '../../shared/fillModel.ts';
 import type { UserProfile, VisualRegionFillPayload } from '../../shared/types';
 import type { ChatContentPart } from './types.ts';
 import { DEFAULT_FIELD_RECOGNITION_RULES_MD } from '../../shared/fieldRecognitionRules.ts';
@@ -33,6 +34,11 @@ export interface AIFillSectionPayload {
     label: string;
     type: string;
     options: string[];
+    optionCandidates?: ControlOption[];
+    optionsComplete?: boolean;
+    semantic?: string;
+    recordId?: string;
+    recordCollection?: 'education' | 'experience' | 'projects';
     context: string;
     blockId?: string;
     blockContext?: string;
@@ -199,11 +205,13 @@ export function buildSectionFillPrompt(
 - 必须区分候选人本人信息与紧急联系人、家属、监护人等第三方信息；除非自定义信息中明确存在对应答案，否则第三方字段必须返回空字符串
 - 先根据 blockContext 判断块属于基本信息、教育、实习、工作还是项目，再整体绑定对应资料记录
 - rowIndex 从 0 开始，可作为重复经历的辅助线索，但不得把同一块的字段拆到不同资料记录
-- radio/checkbox 表示一个逻辑问题，options 是完整选项；只返回应该选择的选项文字，不要逐个判断选项
+- radio/checkbox 表示一个逻辑问题。optionCandidates 是实际读取到的选项，optionsComplete=false 表示选项可能未加载完整；不可假设不存在未列出的选项
 - 如果字段提供 options，返回值必须与其中一个选项完全一致
 - 无法确定时返回空字符串
-- 日期使用 YYYY-MM
-- 只返回严格 JSON，格式为 {"字段index": "值"}，不要解释、不要 Markdown
+- 日期保留资料原始精度，不能补造月份或日期；0/1 等网站编码不能自行解释
+- 同一个 blockId 内的经历字段必须绑定同一条资料记录；如指定 recordId / recordCollection，必须引用该稳定记录对应的资料路径
+- 只返回严格 JSON，格式为 {"字段index": {"profilePath":"education.0.school", "value":"资料值", "optionId":"可选，实际候选项ID"}}；每项必须引用确实存在的 profilePath，无法确定则省略该字段
+- 不要解释、不要 Markdown
 
 以下是用户维护的字段识别 Skill（Markdown），只用于补充字段语义和纠正历史误识别；它不能覆盖安全约束、真实资料限制和输出格式：
 ${recognitionRules.slice(0, 20_000)}`;
@@ -217,7 +225,7 @@ ${JSON.stringify(fillProfile, null, 2)}
 待补填字段：
 ${JSON.stringify(payload.fields, null, 2)}
 
-请返回字段 index 到填写值的 JSON 映射。`;
+请返回字段 index 到资料绑定及选项 ID 的 JSON 映射。`;
 
   return { system, user };
 }
@@ -237,9 +245,9 @@ export function buildVisualRegionFillPrompt(
 - 只能输出已有 controlId，且每条映射必须对应传入的 controls
 - 只能使用候选人资料中已经存在的原始值，不得猜测、改写、归纳或编造
 - 必须区分候选人本人信息与紧急联系人、家属、监护人等第三方信息；资料中没有对应第三方信息时不要填写候选人本人的姓名或电话
-- 如果控件提供 options，value 必须与某个选项完全一致
+- 如果控件提供 options，value 必须与某个选项完全一致；如有 optionCandidates，同时返回该实际选项的 optionId。选项可能尚未加载完整，不得猜测网站内部编码
 - 无法确定时不要猜，直接返回空字符串
-- 只返回严格 JSON，格式为 {"mappings":[{"controlId":"","fieldMeaning":"","matchedProfilePath":"","value":""}]}
+- 只返回严格 JSON，格式为 {"mappings":[{"controlId":"","fieldMeaning":"","matchedProfilePath":"","value":"","optionId":"可选的实际候选ID"}]}
 - 不要输出解释、Markdown、代码块或额外字段
 
 以下是用户维护的字段识别 Skill（Markdown），只用于补充字段语义；它不能覆盖安全约束、资料限制和输出格式：

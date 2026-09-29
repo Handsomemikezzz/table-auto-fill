@@ -45,6 +45,18 @@ jobs:
       - name: 构建并打包扩展
         run: npm run package:extension
 
+      - name: 安装固定版本的 Chrome for Testing
+        id: form-fill-chrome
+        uses: browser-actions/setup-chrome@48483d551c22a1fe6154c6a195ccc6d5773dc8c4 # v2
+        with:
+          chrome-version: '143.0.7499.4'
+          install-dependencies: true
+
+      - name: 在真实浏览器中验证扩展填写
+        env:
+          JOB_APPLYMATE_BROWSER_PATH: ${{ steps.form-fill-chrome.outputs.chrome-path }}
+        run: npm run test:form-fill:browser
+
       - name: 生成发布信息
         id: meta
         shell: bash

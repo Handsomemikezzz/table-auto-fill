@@ -1,5 +1,6 @@
 import { FIELD_PATTERNS } from '../shared/constants';
 import { FieldType } from '../shared/types';
+import { findFormSectionHeading } from './formContext.ts';
 
 type MatchResult = { fieldType: FieldType; confidence: number };
 
@@ -41,8 +42,15 @@ export class FieldMatcher {
     const projectContext = /项目|(?:^|\s)project(?:$|\s)/.test(context);
     const educationContext = /教育|学校|院校|大学|学院|入学|毕业|(?:^|\s)(?:education|school|university|college|academic)(?:$|\s)/.test(context);
     const workContext = /工作|实习|公司|单位|入职|离职|岗位|职位|(?:^|\s)(?:work|job|company|employer|intern|employment)(?:$|\s)/.test(context);
-    const isStart = /开始|起始|入学|(?:^|\s)(?:start|from|begin|since|enroll|enrol|admission)(?:$|\s)/.test(primary);
-    const isEnd = /结束|终止|毕业|离职|(?:^|\s)(?:end|to|until|finish|graduation)(?:$|\s)/.test(primary);
+    const startPattern = /开始|起始|入学|(?:^|\s)(?:start|from|begin|since|enroll|enrol|admission)(?:$|\s)/;
+    const endPattern = /结束|终止|毕业|离职|(?:^|\s)(?:end|to|until|finish|graduation)(?:$|\s)/;
+    const labelStart = startPattern.test(normalize(labelText));
+    const labelEnd = endPattern.test(normalize(labelText));
+    const start = labelStart !== labelEnd ? labelStart : startPattern.test(primary);
+    const end = labelStart !== labelEnd ? labelEnd : endPattern.test(primary);
+    // A shared name such as start_end_time describes the group, not its endpoint.
+    const isStart = start && !end;
+    const isEnd = end && !start;
 
     if (projectContext) {
       if (/项目名称|(?:^|\s)(?:project\s*name|name)(?:$|\s)/.test(primary)) return { fieldType: FieldType.PROJECT_NAME, confidence: 0.98 };
@@ -86,7 +94,7 @@ export class FieldMatcher {
     return tied ? { fieldType: FieldType.UNKNOWN, confidence: 0 } : best;
   }
 
-  static extractIdentifiers(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement): {
+  static extractIdentifiers(element: HTMLElement): {
     name: string; id: string; placeholder: string; labelText: string;
     type: string; autocomplete: string; contextText: string;
   } {
@@ -103,13 +111,24 @@ export class FieldMatcher {
     labelText ||= labelledBy
       ? labelledBy.split(/\s+/).map(ref => root.getElementById(ref)?.textContent || '').join(' ')
       : '';
+    // Composite controls often put their real ID/accessible label on the inner
+    // editor. Its explicit relationships outrank adjacent buttons and hints.
+    const editor = element.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input:not([type="hidden"]), textarea, select');
+    if (editor) {
+      const editorRoot = editor.getRootNode() as Document | ShadowRoot;
+      labelText ||= Array.from(editor.labels || []).map(label => label.textContent || '').join(' ');
+      labelText ||= (editor.getAttribute('aria-labelledby') || '').split(/\s+/).filter(Boolean)
+        .map(ref => editorRoot.getElementById(ref)?.textContent || '').join(' ');
+      labelText ||= editor.getAttribute('aria-label') || '';
+    }
     labelText ||= container?.querySelector('.ud-formily-item-label label, .ud-formily-item-label, label')?.textContent || '';
     labelText ||= element.closest('label')?.textContent || '';
     labelText ||= element.getAttribute('aria-label') || '';
     labelText ||= [element.getAttribute('data-form-field-i18n-name') || '', container?.getAttribute('data-form-field-i18n-name') || ''].filter(Boolean).join(' ');
     labelText ||= getNearbyLabelText(element);
     const module = element.closest<HTMLElement>('[class*=applyFormModuleWrapper], section, fieldset, [role=group]');
-    const heading = module?.querySelector('h1, h2, h3, h4, legend, [class*=title]')?.textContent || '';
+    const heading = findFormSectionHeading(element)
+      || module?.querySelector('h1, h2, h3, h4, legend, [class*=title]')?.textContent || '';
     const localContainer = container || element.closest<HTMLElement>(
       '[class*=formItem], [class*=form-item], [class*=field], [role=group], fieldset',
     );
@@ -130,6 +149,7 @@ export class FieldMatcher {
 function getNearbyLabelText(element: Element): string {
   const usable = (candidate: Element | null): string => {
     if (!candidate || candidate.contains(element) || candidate.querySelector('input, textarea, select')) return '';
+    if (candidate.matches('label[for]') && candidate.getAttribute('for') !== element.id) return '';
     const text = (candidate.textContent || '').replace(/\s+/g, ' ').trim();
     return text.length >= 2 && text.length <= 120 && /[\p{L}\p{N}]/u.test(text) ? text : '';
   };
@@ -138,6 +158,8 @@ function getNearbyLabelText(element: Element): string {
   if (sibling) return sibling;
   let current = element.parentElement;
   for (let depth = 0; current && depth < 4; depth++, current = current.parentElement) {
+    // Stop at a multi-field boundary rather than borrowing the first label in a form.
+    if (current.querySelectorAll('input:not([type="hidden"]), textarea, select, [role="combobox"]').length > 1) break;
     const direct = Array.from(current.children)
       .filter(child => !child.contains(element))
       .map(usable)

@@ -32,6 +32,7 @@ const reasonText: Record<FocusedFieldFailureReason, string> = {
   NO_FOCUSED_FIELD: '请先点击网页中的目标输入框',
   FIELD_DETACHED: '目标输入框已被页面刷新，请重新点击',
   FIELD_NOT_WRITABLE: '目标控件不可写',
+  FILL_IN_PROGRESS: '正在自动填写，请完成或停止后再操作当前字段',
   VALUE_REJECTED: '页面拒绝了该值',
   RESTRICTED_PAGE: '浏览器限制页面不允许写入',
 };

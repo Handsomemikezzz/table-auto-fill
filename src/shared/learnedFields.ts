@@ -129,3 +129,32 @@ function hashText(value: string): string {
   }
   return (hash >>> 0).toString(16).padStart(8, '0');
 }
+
+/** Read current profile facts by stable record identity, never an old array position. */
+export function resolveLearnedValue(entry: LearnedFieldValue | undefined, profile: UserProfile): string {
+  if (!entry) return '';
+  if (!entry.profilePath) return entry.value;
+  let path = entry.profilePath;
+  const collection = path.match(/^(education|experience|projects|customInformation|certifications)(?:\[(\d+)\]|\.(\d+))\.(.+)$/);
+  if (collection) {
+    // Old index-only memories can point at a different record after reordering.
+    if (!entry.profileRecordId) return '';
+    const records = profile[collection[1] as 'education' | 'experience' | 'projects' | 'customInformation' | 'certifications'];
+    const index = records.findIndex(record => record.id === entry.profileRecordId);
+    if (index < 0) return '';
+    path = `${collection[1]}.${index}.${collection[4]}`;
+  }
+  const resolved = readProfilePath(profile, path);
+  return typeof resolved === 'string' && resolved.trim() ? resolved : '';
+}
+
+function readProfilePath(profile: UserProfile, path: string): unknown {
+  const segments = path.replace(/\[(\d+)\]/g, '.$1').split('.').filter(Boolean);
+  let current: unknown = profile;
+  for (const segment of segments) {
+    if (!current || typeof current !== 'object' || !Object.hasOwn(current, segment)
+      || ['__proto__', 'constructor', 'prototype'].includes(segment)) return undefined;
+    current = (current as Record<string, unknown>)[segment];
+  }
+  return current;
+}

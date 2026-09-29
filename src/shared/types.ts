@@ -1,3 +1,4 @@
+import type { ControlOption } from './fillModel.ts';
 // 用户资料数据模型
 export interface UserProfile {
   personal: PersonalInfo;
@@ -113,6 +114,8 @@ export interface LearnedFieldValue {
   /** 当地规则识别出的字段类型；unknown 表示需依靠标签或 AI 规则。 */
   fieldType?: string;
   profilePath?: string;
+  /** Protect collection bindings when entries are reordered or a resume changes. */
+  profileRecordId?: string;
   updatedAt: string;
 }
 
@@ -247,6 +250,7 @@ export type FocusedFieldFailureReason =
   | 'NO_FOCUSED_FIELD'
   | 'FIELD_DETACHED'
   | 'FIELD_NOT_WRITABLE'
+  | 'FILL_IN_PROGRESS'
   | 'VALUE_REJECTED'
   | 'RESTRICTED_PAGE';
 
@@ -290,6 +294,12 @@ export interface VisualRegionControlCandidate {
   name: string;
   placeholder: string;
   options: string[];
+  optionCandidates?: ControlOption[];
+  optionsComplete?: boolean;
+  semantic?: string;
+  recordId?: string;
+  recordCollection?: 'education' | 'experience' | 'projects';
+  blockId?: string;
   rect: VisualRegionControlRect;
   contextText: string;
 }
@@ -299,6 +309,7 @@ export interface VisualRegionFillMapping {
   fieldMeaning: string;
   matchedProfilePath: string;
   value: string;
+  optionId?: string;
 }
 
 interface VisualRegionFillPayloadBase {
@@ -389,6 +400,11 @@ export type Message =
           label: string;
           type: string;
           options: string[];
+          optionCandidates?: ControlOption[];
+          optionsComplete?: boolean;
+          semantic?: string;
+          recordId?: string;
+          recordCollection?: 'education' | 'experience' | 'projects';
           context: string;
           blockId?: string;
           blockContext?: string;
@@ -420,7 +436,9 @@ export interface MessageResponse<T = any> {
 
 // 表单字段检测结果
 export interface DetectedField {
-  element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+  element: HTMLElement;
+  /** Resolved accessible label, shared with record binding and AI descriptions. */
+  label?: string;
   fieldType: string;
   confidence: number;
   value?: string;
@@ -442,6 +460,9 @@ export enum FieldType {
   WECHAT = 'wechat',
   ID_CARD = 'idCard',
   POLITICAL_STATUS = 'politicalStatus',
+  ETHNICITY = 'ethnicity',
+  HOMETOWN = 'hometown',
+  CURRENT_ADDRESS = 'currentAddress',
   SCHOOL = 'school',
   COLLEGE = 'college',
   EDUCATION_TYPE = 'educationType',

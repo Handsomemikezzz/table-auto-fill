@@ -6,6 +6,7 @@ import {
   isMissingInformationRecord,
   saveLearnedValueToProfile,
   updateLearnedFieldStore,
+  resolveLearnedValue,
 } from './learnedFields.ts';
 import {
   DEFAULT_FIELD_RECOGNITION_RULES_MD,
@@ -33,6 +34,19 @@ test('每个网站只保留最近的学习记录', () => {
     }, 2);
   }
   assert.deepEqual(Object.keys(getLearnedFieldsForDomain(store, 'jobs.example.com')), ['field-2', 'field-1']);
+});
+
+test('学习绑定跟随记录ID重排，删除和旧索引绑定不复用过期答案', () => {
+  const profile = {
+    personal: { name: '张三', gender: '', birthDate: '', phone: '', email: '' },
+    education: [], experience: [], projects: [], skills: [], certifications: [],
+    customInformation: [{ id: 'b', name: 'B', content: 'B的新答案' }, { id: 'a', name: 'A', content: 'A的新答案' }],
+  };
+  const entry = { signature: 's', label: 'A', value: 'A的旧答案', updatedAt: '', profilePath: 'customInformation[0].content', profileRecordId: 'a' };
+  assert.equal(resolveLearnedValue(entry, profile), 'A的新答案');
+  assert.equal(resolveLearnedValue({ ...entry, profileRecordId: 'removed' }, profile), '');
+  assert.equal(resolveLearnedValue({ ...entry, profileRecordId: undefined }, profile), '');
+  assert.equal(resolveLearnedValue({ ...entry, profilePath: 'personal.constructor.name' }, profile), '');
 });
 
 test('缺失的基础字段答案会同步到个人资料', () => {
