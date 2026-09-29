@@ -257,8 +257,8 @@ export function AISettings({ dataRevision = 0 }: AISettingsProps) {
         </div>
       )}
 
-      <div className="settings-field">
-        <label>AI 字段识别 Skill（Markdown）</label>
+      <details className="settings-field"><summary>旧版规则与兼容数据</summary>
+        <label>旧版识别规则（兼容数据）</label>
         <textarea
           value={recognitionRules}
           onChange={e => setRecognitionRules(e.target.value)}
@@ -268,7 +268,7 @@ export function AISettings({ dataRevision = 0 }: AISettingsProps) {
           placeholder="写下字段识别规则，例如：紧急联系电话属于紧急联系人，不是候选人本人电话。"
         />
         <p className="settings-hint">
-          AI 扫描填充、视觉填充和字段分类都会读取这里。失败补填窗口保存的“AI 识别纠错”也会自动追加到这份 Markdown。
+          保留用于旧版备份兼容。当前填写使用字段定义表；请在任务面板确认字段含义，在“自定义信息 → 学习记录”管理已确认纠错。
           <button
             type="button"
             onClick={() => setRecognitionRules(DEFAULT_FIELD_RECOGNITION_RULES_MD)}
@@ -277,12 +277,12 @@ export function AISettings({ dataRevision = 0 }: AISettingsProps) {
             恢复默认规则
           </button>
         </p>
-      </div>
+      </details>
 
       <div className="settings-button-row">
         <button
           onClick={handleTest}
-          disabled={testing || !config.apiKey}
+          disabled={testing || (!config.apiKey && config.provider !== LLMProvider.CUSTOM)}
           className="btn btn-secondary"
         >
           {testing ? '测试中...' : '测试连接'}

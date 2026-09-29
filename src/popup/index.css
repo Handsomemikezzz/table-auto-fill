@@ -53,14 +53,6 @@ button {
   border-radius: 0 0 24px 24px;
 }
 
-.popup-header-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-left: auto;
-  align-items: flex-end;
-}
-
 .popup-brand-mark {
   width: 44px;
   height: 44px;
@@ -82,35 +74,6 @@ button {
   margin: 3px 0 0;
   color: rgba(255, 255, 255, 0.7);
   font-size: 12px;
-}
-
-.header-action-button {
-  min-height: 34px;
-  padding: 7px 14px;
-  border: 1px solid rgba(85, 230, 193, 0.32);
-  border-radius: 999px;
-  background: rgba(85, 230, 193, 0.14);
-  color: #c9fff1;
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 1.2;
-  cursor: pointer;
-}
-
-.header-action-button:hover:not(:disabled) {
-  border-color: rgba(85, 230, 193, 0.5);
-  background: rgba(85, 230, 193, 0.22);
-}
-
-.header-action-button-secondary {
-  border-color: rgba(255, 255, 255, 0.24);
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.88);
-}
-
-.header-action-button-secondary:hover:not(:disabled) {
-  border-color: rgba(148, 163, 184, 0.42);
-  background: #f8fafc;
 }
 
 .popup-content {

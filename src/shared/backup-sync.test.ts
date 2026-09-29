@@ -17,10 +17,8 @@ import {
 } from './sync.ts';
 import {
   buildWebDAVFileUrl,
-  buildWebDAVApplicationRecordsCsvUrl,
   getRemoteDocument,
   normalizeWebDAVServerUrl,
-  putRemoteApplicationRecordsCsv,
   putRemoteDocument,
   testConnection,
   WebDAVError,
@@ -211,9 +209,9 @@ test('旧资料缺少数组字段时会补齐为空数组', () => {
   }
 });
 
-test('拒绝结构非法的投递记录数组', () => {
+test('拒绝非对象类型的旧版兼容数据', () => {
   const document = JSON.parse(validJson());
-  document.data.applicationRecords = [{ id: 1 }];
+  document.data.applicationRecords = [123];
   const result = parseAndValidateBackup(JSON.stringify(document));
   assert.equal(result.success, false);
   if (!result.success) assert.equal(result.error.code, 'INVALID_DATA');
@@ -301,12 +299,6 @@ test('WebDAV 服务器地址自动追加固定文件名', () => {
   );
 });
 
-test('WebDAV 投递记录 CSV 使用固定文件名', () => {
-  assert.equal(
-    buildWebDAVApplicationRecordsCsvUrl('https://dav.example.com/backups'),
-    'https://dav.example.com/backups/job-application-helper/application-records.csv',
-  );
-});
 
 test('旧版完整文件 URL 会迁移为服务器目录', () => {
   assert.equal(
@@ -422,32 +414,6 @@ test('WebDAV 首次创建携带 If-None-Match', async () => {
   }
 });
 
-test('投递记录 CSV 以上传覆盖方式写入固定文件', async () => {
-  const originalFetch = globalThis.fetch;
-  let captured: RequestInit | undefined;
-  let capturedUrl = '';
-  globalThis.fetch = async (input, init) => {
-    capturedUrl = String(input);
-    captured = init;
-    return new Response('', { status: 201, headers: { ETag: '"csv-v1"' } });
-  };
-  try {
-    const result = await putRemoteApplicationRecordsCsv(
-      webdavConfig,
-      'companyName,jobTitle\n字节跳动,前端开发',
-    );
-    assert.equal(
-      capturedUrl,
-      'https://dav.example.com/backups/job-application-helper/application-records.csv',
-    );
-    assert.equal(new Headers(captured?.headers).get('Content-Type'), 'text/csv; charset=utf-8');
-    assert.equal(new Headers(captured?.headers).get('If-Match'), null);
-    assert.equal(new Headers(captured?.headers).get('If-None-Match'), null);
-    assert.equal(result.etag, '"csv-v1"');
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
 
 test('WebDAV 首次 PUT 404 时自动创建固定目录后重试', async () => {
   const originalFetch = globalThis.fetch;
@@ -733,11 +699,7 @@ test('仅远端变化时下载并替换本地业务数据', async () => {
     assert.equal(metadata.status, 'synced');
     assert.equal(metadata.etag, '"v2"');
     assert.equal(metadata.lastSyncedHash, await sha256BusinessData(remoteData));
-    assert.ok(requests.some(request =>
-      request.method === 'PUT'
-      && request.url === 'https://dav.example.com/backups/job-application-helper/application-records.csv'
-      && request.body?.includes('companyName,jobTitle,sourceSite'),
-    ));
+    assert.equal(requests.some(request => request.url.endsWith('.csv')), false);
   } finally {
     globalThis.fetch = originalFetch;
     mock.restore();

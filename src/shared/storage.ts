@@ -1,5 +1,4 @@
 import type {
-  ApplicationRecord,
   BackupData,
   SettingsData,
   SyncMetadata,
@@ -7,7 +6,6 @@ import type {
   WebDAVConfig,
 } from './types';
 import type { LLMConfig } from '../services/llm/types';
-import { normalizeApplicationRecords } from './applicationRecords.ts';
 import { normalizeWebDAVServerUrl } from '../services/webdav.ts';
 import { normalizeResumeLibrary } from './resumes.ts';
 import { normalizeBirthDateValue, normalizePoliticalStatusValue } from './personal.ts';
@@ -18,7 +16,8 @@ export const STORAGE_KEYS = {
   LLM_CONFIG: 'llmConfig',
   WEBDAV_CONFIG: 'webdavConfig',
   SYNC_METADATA: 'syncMetadata',
-  APPLICATION_RECORDS: 'applicationRecords',
+  // Keep the retired key for non-destructive legacy backup compatibility.
+  LEGACY_APPLICATION_RECORDS: 'applicationRecords',
 } as const;
 
 export function normalizeUserProfile(profile: UserProfile): UserProfile {
@@ -36,10 +35,10 @@ export function normalizeUserProfile(profile: UserProfile): UserProfile {
     customInformation: profile.customInformation || [],
     education: (profile.education || []).map(education => ({
       ...education,
-      college: education.college || inferCollegeForKnownMockData(education.school, education.major),
-      educationType: education.educationType || '统招全日制',
+      college: education.college || '',
+      educationType: education.educationType || '',
       majorCategory: education.majorCategory || '',
-      academicDegree: education.academicDegree || inferAcademicDegree(education.degree),
+      academicDegree: education.academicDegree || '',
       degree: normalizeEducationLevel(education.degree),
     })),
     experience: profile.experience || [],
@@ -50,26 +49,12 @@ export function normalizeUserProfile(profile: UserProfile): UserProfile {
   } as UserProfile;
 }
 
-function inferAcademicDegree(degree?: string): string {
-  if (/博士/.test(degree || '')) return '博士';
-  if (/硕士|研究生/.test(degree || '')) return '硕士';
-  if (/本科|学士/.test(degree || '')) return '学士';
-  return '';
-}
-
 function normalizeEducationLevel(degree?: string): string {
   const value = degree || '';
   if (/博士/.test(value) && !/博士后/.test(value)) return '博士研究生';
   if (/硕士|研究生|MBA|EMBA/i.test(value)) return '硕士研究生';
   if (/本科|学士/.test(value)) return '本科';
   return value;
-}
-
-function inferCollegeForKnownMockData(school?: string, major?: string): string {
-  if (school === '北京大学' && major === '计算机科学与技术') return '信息科学技术学院';
-  if (school === '浙江大学' && major === '软件工程') return '软件学院';
-  if (school === '北京市第四中学') return '理科实验班';
-  return '';
 }
 
 export class StorageService {
@@ -179,16 +164,14 @@ export class StorageService {
       STORAGE_KEYS.USER_PROFILE,
       STORAGE_KEYS.LLM_CONFIG,
       STORAGE_KEYS.SETTINGS,
-      STORAGE_KEYS.APPLICATION_RECORDS,
+      STORAGE_KEYS.LEGACY_APPLICATION_RECORDS,
     ]);
     const profile = (result[STORAGE_KEYS.USER_PROFILE] as UserProfile | undefined) || null;
     return {
       userProfile: profile ? normalizeUserProfile(profile) : null,
       llmConfig: (result[STORAGE_KEYS.LLM_CONFIG] as LLMConfig | undefined) || null,
       settings: (result[STORAGE_KEYS.SETTINGS] as SettingsData | undefined) || null,
-      applicationRecords: normalizeApplicationRecords(
-        result[STORAGE_KEYS.APPLICATION_RECORDS] as ApplicationRecord[] | undefined,
-      ),
+      applicationRecords: (result[STORAGE_KEYS.LEGACY_APPLICATION_RECORDS] as BackupData['applicationRecords']) ?? [],
     };
   }
 
@@ -207,8 +190,8 @@ export class StorageService {
     }
 
     if (Object.hasOwn(data, 'applicationRecords')) {
-      if (data.applicationRecords === null) removals.push(STORAGE_KEYS.APPLICATION_RECORDS);
-      else values[STORAGE_KEYS.APPLICATION_RECORDS] = normalizeApplicationRecords(data.applicationRecords);
+      if (data.applicationRecords === null) removals.push(STORAGE_KEYS.LEGACY_APPLICATION_RECORDS);
+      else values[STORAGE_KEYS.LEGACY_APPLICATION_RECORDS] = data.applicationRecords;
     }
 
     // webdavConfig 仅在本地导入时恢复，同步下载不会覆盖本地凭据。
@@ -256,31 +239,4 @@ export class StorageService {
     await this.replaceBusinessData(data);
   }
 
-  static async getApplicationRecords(): Promise<ApplicationRecord[]> {
-    const result = await chrome.storage.local.get(STORAGE_KEYS.APPLICATION_RECORDS);
-    return normalizeApplicationRecords(result[STORAGE_KEYS.APPLICATION_RECORDS] as ApplicationRecord[] | undefined);
-  }
-
-  static async saveApplicationRecords(records: ApplicationRecord[]): Promise<void> {
-    await chrome.storage.local.set({
-      [STORAGE_KEYS.APPLICATION_RECORDS]: normalizeApplicationRecords(records),
-    });
-  }
-
-  static async createApplicationRecord(record: ApplicationRecord): Promise<void> {
-    const records = await this.getApplicationRecords();
-    await this.saveApplicationRecords([...records, record]);
-  }
-
-  static async updateApplicationRecord(record: ApplicationRecord): Promise<void> {
-    const records = await this.getApplicationRecords();
-    await this.saveApplicationRecords(records.map(existingRecord => (
-      existingRecord.id === record.id ? record : existingRecord
-    )));
-  }
-
-  static async deleteApplicationRecord(id: string): Promise<void> {
-    const records = await this.getApplicationRecords();
-    await this.saveApplicationRecords(records.filter(record => record.id !== id));
-  }
 }

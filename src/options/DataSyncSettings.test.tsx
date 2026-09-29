@@ -2,14 +2,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-test('WebDAV 同步文案明确说明投递记录会额外保留 CSV 副本', () => {
+test('备份与同步仅展示简历资料功能', () => {
   const source = readFileSync(new URL('./DataSyncSettings.tsx', import.meta.url), 'utf8');
-  assert.match(source, /投递记录会额外保留一份 CSV 副本/);
-});
-
-test('本地 JSON 备份文案明确排除投递记录', () => {
-  const source = readFileSync(new URL('./DataSyncSettings.tsx', import.meta.url), 'utf8');
-  assert.match(source, /导入或导出个人资料、简历原文件、AI 配置和通用设置，不包含投递记录。/);
+  assert.match(source, /导入或导出个人资料、简历原文件、AI 配置和通用设置/);
+  assert.doesNotMatch(source, /投递记录|CSV 副本/);
 });
 
 test('立即同步按钮不再要求启用自动同步', () => {

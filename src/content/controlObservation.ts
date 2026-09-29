@@ -212,6 +212,7 @@ export function observeControl(element: HTMLElement): ControlObservation {
     element, kind, label: getControlLabel(element), value: getControlValue(element),
     disabled: isDisabledControl(element) || Boolean(editor?.disabled), readOnly: Boolean(editor?.readOnly), options,
     optionsComplete: kind !== 'combobox' || (popups.length > 0 && popups.every(popup => (
+      isVisibleControl(popup) &&
       popup.getAttribute('aria-busy') !== 'true'
       && !popup.querySelector('[aria-setsize], [aria-posinset], [class*="virtual"]')
       && popup.scrollHeight <= popup.clientHeight

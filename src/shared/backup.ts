@@ -1,5 +1,4 @@
 import type {
-  ApplicationRecord,
   BackupData,
   BackupDocument,
   BackupDocumentV1,
@@ -80,6 +79,8 @@ function validateUserProfile(value: unknown): value is UserProfile {
   if (!validateOptionalObjectArray(value.projects, [
     'id', 'name', 'role', 'startDate', 'endDate', 'description', 'achievements', 'technologies',
   ])) return false;
+  if (!validateOptionalObjectArray(value.additionalFacts, ['id', 'meaningId', 'label', 'subject', 'value', 'valueType', 'updatedAt'])) return false;
+  if (Array.isArray(value.additionalFacts) && value.additionalFacts.some(fact => !['text', 'date'].includes(fact.valueType as string))) return false;
   if (!validateOptionalObjectArray(value.customInformation, ['id', 'name', 'content'])) return false;
   if (!validateOptionalObjectArray(value.certifications, ['id', 'name', 'issuer', 'date', 'credentialId'])) {
     return false;
@@ -134,22 +135,6 @@ function validateLLMConfig(value: unknown): value is LLMConfig {
   return true;
 }
 
-function validateApplicationRecords(value: unknown): boolean {
-  return value === undefined || value === null || validateOptionalObjectArray(value, [
-    'id',
-    'companyName',
-    'jobTitle',
-    'sourceSite',
-    'sourceUrl',
-    'status',
-    'notes',
-    'appliedAt',
-    'location',
-    'createdAt',
-    'updatedAt',
-  ]);
-}
-
 function validateV1(value: PlainObject): BackupParseResult {
   if (typeof value.exportedAt !== 'string' || Number.isNaN(Date.parse(value.exportedAt))) {
     return failure('INVALID_EXPORTED_AT', '导出时间无效');
@@ -172,8 +157,9 @@ function validateV1(value: PlainObject): BackupParseResult {
   if (settings !== null && !isPlainObject(settings)) {
     return failure('INVALID_SETTINGS', '设置数据结构无效');
   }
-  if (!validateApplicationRecords(applicationRecords)) {
-    return failure('INVALID_DATA', '投递记录结构无效');
+  if (applicationRecords !== undefined && applicationRecords !== null
+    && (!Array.isArray(applicationRecords) || !applicationRecords.every(isPlainObject))) {
+    return failure('INVALID_DATA', '旧版兼容数据结构无效');
   }
 
   // webdavConfig 仅出现在本地导出文件中；WebDAV 同步的文档不含此字段。
@@ -196,7 +182,7 @@ function validateV1(value: PlainObject): BackupParseResult {
     },
   };
   if (applicationRecords !== undefined) {
-    document.data.applicationRecords = (applicationRecords as ApplicationRecord[] | null) ?? null;
+    document.data.applicationRecords = (applicationRecords as Record<string, unknown>[] | null) ?? null;
   }
   if (value.webdavConfig !== undefined) {
     document.webdavConfig = (value.webdavConfig as WebDAVConfig | null) ?? null;

@@ -1,3 +1,7 @@
+import { AdditionalFactsSection } from './AdditionalFactsSection.tsx';
+import { LearningRecords } from './LearningRecords.tsx';
+import { ProfileImportDraft } from './ProfileImportDraft.tsx';
+import { applyProfileImportDraft, type ProfileImportChange } from '../autofill/profileImport.ts';
 import React, { useState, useEffect } from 'react';
 import { MessageService } from '../shared/message';
 import type {
@@ -10,7 +14,6 @@ import { AISettings } from './AISettings';
 import { EducationSection } from './EducationSection';
 import { ExperienceSection } from './ExperienceSection';
 import { DataSyncSettings } from './DataSyncSettings';
-import { ApplicationRecordsSection } from './ApplicationRecordsSection';
 import { parsePDF } from '../parsers/pdfParser';
 import { parseDOCX } from '../parsers/docxParser';
 import { removeResumeVariant } from '../shared/resumes.ts';
@@ -23,7 +26,6 @@ const OPTION_TABS = [
   'resume',
   'ai',
   'data-sync',
-  'application-records',
 ] as const;
 
 type OptionTab = typeof OPTION_TABS[number];
@@ -127,6 +129,7 @@ function resizeAutoGrowTextarea(element: HTMLTextAreaElement): void {
 }
 
 function App() {
+  const [importDraft, setImportDraft] = useState<ProfileImportChange[] | null>(null);
   const [profile, setProfile] = useState<UserProfile>({
     personal: {} as PersonalInfo,
     education: [],
@@ -355,9 +358,11 @@ function App() {
         if (response.success && response.data) {
           const result = response.data as {
             parsedData?: ParsedResumeData;
+            importDraft?: ProfileImportChange[];
             parseMethod?: 'structured' | 'llm' | 'regex';
             llmError?: string;
           };
+          setImportDraft(result.importDraft || []);
           const summary = summarizeParsed(result.parsedData);
           setSaveNotice({ type: 'success', text: '简历已加入资料库，可在插件中切换使用' });
 
@@ -488,12 +493,6 @@ function App() {
             className={activeTab === 'data-sync' ? 'options-tab active' : 'options-tab'}
           >
             数据与同步
-          </button>
-          <button
-            onClick={() => setActiveTab('application-records')}
-            className={activeTab === 'application-records' ? 'options-tab active' : 'options-tab'}
-          >
-            投递记录
           </button>
         </nav>
 
@@ -683,6 +682,7 @@ function App() {
             </div>
           )}
 
+          {activeTab === 'custom' && <><AdditionalFactsSection facts={profile.additionalFacts || []} onChange={additionalFacts => setProfile({ ...profile, additionalFacts })} /><LearningRecords /></>}
           {activeTab === 'custom' && (
             <div className="options-form">
               <div className="custom-information-header">
@@ -748,6 +748,14 @@ function App() {
             </div>
           )}
 
+          {importDraft && <ProfileImportDraft changes={importDraft} onDismiss={() => setImportDraft(null)} onApply={async changes => {
+            const current = await MessageService.sendMessage<UserProfile>({ type: 'GET_USER_PROFILE' });
+            if (!current.success || !current.data) throw new Error(current.error || '无法读取资料');
+            const updated = applyProfileImportDraft(current.data, changes);
+            const result = await MessageService.sendMessage({ type: 'SAVE_USER_PROFILE', payload: updated });
+            if (!result.success) throw new Error(result.error || '保存失败');
+            setProfile(updated); setImportDraft(null); setSaveNotice({ type: 'success', text: '已保存确认的资料更新' });
+          }} />}
           {activeTab === 'resume' && (
             <div className="options-form">
               <h2 className="section-title">简历库</h2>
@@ -844,9 +852,7 @@ function App() {
             <DataSyncSettings onDataChanged={handleExternalDataChange} />
           )}
 
-          {activeTab === 'application-records' && <ApplicationRecordsSection />}
-
-          {activeTab !== 'ai' && activeTab !== 'data-sync' && activeTab !== 'application-records' && (
+          {activeTab !== 'ai' && activeTab !== 'data-sync' && (
             <div className="options-actions">
             <button onClick={handleSave} disabled={saving} className="btn btn-primary">
               {saving ? '保存中...' : '保存设置'}

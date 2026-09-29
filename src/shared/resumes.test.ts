@@ -202,7 +202,7 @@ test('旧简历没有独立资料时继续使用全局资料', () => {
   assert.equal(buildProfileForResume(profile, LEGACY_RESUME_ID).personal.name, '旧版用户');
 });
 
-test('旧简历的硕士字段迁移为独立的学历层次和学位', () => {
+test('旧简历迁移保留学历，但不推断缺失学位', () => {
   const resumes = normalizeResumeLibrary({
     resumes: [{
       ...legacyResume,
@@ -218,7 +218,7 @@ test('旧简历的硕士字段迁移为独立的学历层次和学位', () => {
     }],
   });
   assert.equal(resumes[0]?.parsedProfile?.education[0]?.degree, '硕士研究生');
-  assert.equal(resumes[0]?.parsedProfile?.education[0]?.academicDegree, '硕士');
+  assert.equal(resumes[0]?.parsedProfile?.education[0]?.academicDegree, '');
 });
 
 test('简历解析缺少学院时按学校和学历层次使用手动资料补全', () => {

@@ -3,7 +3,6 @@ import type { WebDAVConfig } from '../shared/types';
 const REQUEST_TIMEOUT_MS = 20_000;
 export const WEBDAV_BACKUP_DIRECTORY = 'job-application-helper/';
 export const WEBDAV_BACKUP_FILENAME = 'job-application-helper.json';
-export const WEBDAV_APPLICATION_RECORDS_FILENAME = 'application-records.csv';
 
 export type WebDAVErrorCode =
   | 'INVALID_URL'
@@ -55,13 +54,6 @@ export function normalizeWebDAVServerUrl(rawUrl: string): string {
 export function buildWebDAVFileUrl(serverUrl: string): string {
   return new URL(
     `${WEBDAV_BACKUP_DIRECTORY}${WEBDAV_BACKUP_FILENAME}`,
-    normalizeWebDAVServerUrl(serverUrl),
-  ).toString();
-}
-
-export function buildWebDAVApplicationRecordsCsvUrl(serverUrl: string): string {
-  return new URL(
-    `${WEBDAV_BACKUP_DIRECTORY}${WEBDAV_APPLICATION_RECORDS_FILENAME}`,
     normalizeWebDAVServerUrl(serverUrl),
   ).toString();
 }
@@ -215,26 +207,11 @@ export async function putRemoteDocument(
   );
 }
 
-export async function putRemoteApplicationRecordsCsv(
-  config: WebDAVConfig,
-  csv: string,
-): Promise<{ etag?: string }> {
-  return putRemoteFile(
-    config,
-    csv,
-    {
-      condition: { type: 'overwrite' },
-      contentType: 'text/csv; charset=utf-8',
-      targetUrl: buildWebDAVApplicationRecordsCsvUrl(config.serverUrl),
-    },
-  );
-}
-
 async function putRemoteFile(
   config: WebDAVConfig,
   body: string,
   options: {
-    condition: { type: 'create' } | { type: 'update'; etag: string } | { type: 'overwrite' };
+    condition: { type: 'create' } | { type: 'update'; etag: string };
     contentType: string;
     targetUrl: string;
   },

@@ -26,7 +26,7 @@ export function EducationSection({ items, onChange }: Props) {
         id: crypto.randomUUID(),
         school: '',
         college: '',
-        educationType: '统招全日制',
+        educationType: '',
         major: '',
         majorCategory: '',
         degree: '',

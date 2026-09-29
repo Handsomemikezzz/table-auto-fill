@@ -18,6 +18,7 @@ export interface FillContext {
   /** Existing nonempty answers are preserved unless the caller explicitly opts in. */
   overwrite?: boolean;
   optionRef?: string;
+  optionRefs?: string[];
   settleMs?: number;
   timeoutMs?: number;
 }
@@ -28,7 +29,7 @@ interface ExpectedControl {
   requireIdentity?: boolean;
   date?: boolean;
 }
-const verifiedExpectations = new WeakMap<HTMLElement, { requestedValue: string; optionRef?: string; expected: ExpectedControl }>();
+const verifiedExpectations = new WeakMap<HTMLElement, { requestedValue: string; optionRef?: string; optionRefs?: string[]; expected: ExpectedControl }>();
 interface AttemptState {
   startedAt: number;
   deadline: number;
@@ -45,6 +46,7 @@ const pause = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, m
 // Native .click() can synchronously dispatch trusted input/change events. They
 // belong to this action; asynchronous user events remain observable as usual.
 const activeActions = new WeakSet<Document>();
+export function isAutomatedControlAction(document: Document): boolean { return activeActions.has(document); }
 function outcome(state: AttemptState, status: FillStatus, reason: string, expectedValue: string): FillOutcome {
   return {
     status, reason, expectedValue, observedValue: getControlValue(state.element),
@@ -106,10 +108,12 @@ function expectedControl(observation: ControlObservation, value: string, context
     const multiple = isMultipleControl(element);
     const selected: ObservedOption[] = [];
     for (const desired of multiple ? requestedParts(value) : [value]) {
-      if (context.optionRef) {
-        const option = options.find(candidate => candidate.id === context.optionRef && !candidate.disabled);
-        if (!option) return { status: 'needs-mapping', reason: '指定选项已变化，请重新读取网站选项' };
-        selected.push(option);
+      if (context.optionRef || context.optionRefs?.length) {
+        const ids = context.optionRefs || [context.optionRef!];
+        if (!multiple && ids.length !== 1) return { status: 'needs-mapping', reason: '单选控件只能选择一个选项' };
+        const targets = ids.map(id => options.find(candidate => candidate.id === id && !candidate.disabled));
+        if (targets.some(option => !option)) return { status: 'needs-mapping', reason: '指定选项已变化，请重新读取网站选项' };
+        selected.push(...targets as ObservedOption[]);
         break;
       }
       const match = resolveOption({ desired, options, semantic: context.semantic, completeness: observation.optionsComplete ? 'complete' : 'partial' });
@@ -140,7 +144,7 @@ function expectedControl(observation: ControlObservation, value: string, context
       return { status: 'needs-mapping', reason: '网站要求年月，但资料只有年份' };
     }
     return { value: adaptDateValue(value, {
-      inputType: isNativeInput(element) ? element.type : undefined,
+      inputType: isNativeInput(element) && element.type !== 'text' ? element.type : formatHint.trim() ? undefined : parsed?.day ? 'date' : parsed?.month ? 'month' : undefined,
       placeholder: input?.getAttribute('placeholder') || '', pattern: input?.getAttribute('pattern') || '',
     }), date: Boolean(parsed) };
   }
@@ -293,7 +297,7 @@ async function resolveCombobox(state: AttemptState, value: string): Promise<Expe
   expected = expectedControl(observation, value, context);
   if (!isOutcome(expected)) return expected;
   const editor = getEditableElement(element);
-  if (editor && !editor.readOnly && !editor.disabled && !context.optionRef) {
+  if (editor && !editor.readOnly && !editor.disabled && !context.optionRef && !context.optionRefs?.length) {
     state.searchWrite = { editor, previous: state.searchWrite?.previous ?? editor.value, written: value };
     writeText(editor, value);
     await waitForObservation(state, () => !isOutcome(expectedControl(observeControl(element), value, context)), 1500);
@@ -422,7 +426,7 @@ export async function fillControl(element: HTMLElement, value: string, context: 
       await applyExpected(state, expected, true);
       result = await stableVerification(state, expected);
     }
-    if (result.status === 'verified') verifiedExpectations.set(element, { requestedValue: value, optionRef: context.optionRef, expected });
+    if (result.status === 'verified') verifiedExpectations.set(element, { requestedValue: value, optionRef: context.optionRef, optionRefs: context.optionRefs, expected });
     else verifiedExpectations.delete(element);
     return result;
   } catch (error) {
@@ -454,12 +458,12 @@ export async function verifyControl(element: HTMLElement, value: string, context
     const expected = expectedControl(observation, value, context);
     if (isOutcome(expected)) {
       const previous = verifiedExpectations.get(element);
-      if (previous && previous.requestedValue === value && previous.optionRef === context.optionRef) {
+      if (previous && previous.requestedValue === value && previous.optionRef === context.optionRef && JSON.stringify(previous.optionRefs) === JSON.stringify(context.optionRefs)) {
         return await stableVerification(state, previous.expected);
       }
       // Committed comboboxes may remove all option nodes after selection. Require a
       // separate committed display whose label resolves unambiguously to the goal.
-      if (observation.kind === 'combobox' && observation.value && !context.optionRef) {
+      if (observation.kind === 'combobox' && observation.value && !context.optionRef && !context.optionRefs?.length) {
         const multiple = isMultipleControl(element);
         const labels = multiple ? requestedParts(observation.value) : [observation.value];
         const desiredParts = multiple ? requestedParts(value) : [value];

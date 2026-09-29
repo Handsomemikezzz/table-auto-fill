@@ -15,17 +15,13 @@ Job ApplyMate is a Chrome and Edge extension that keeps job-application informat
 | Feature | Description |
 |---|---|
 | Profile management | Store personal information, separate undergraduate/graduate education, work experience, projects, skills, certificates, and custom fields |
-| Quick Fill | Detect common recruitment-form fields and fill them from your saved profile |
-| Logical form detection | Treat radio/checkbox groups, split date controls, and repeated experience rows as complete questions instead of unrelated inputs |
-| Smart date adaptation | Adapt year, month, and date values to the format required by the website; `2020.06`, `2020.6`, and `2020-06` are treated as the same month |
-| Reliable dropdown filling | Handle common UI libraries, delayed options, searchable selects, multi-selects, and cascaders; strictly distinguish political affiliation, positive/negative, and full-time/part-time choices |
-| Missing-information Q&A | After Quick Fill or AI Fill, review recognized questions that have no saved answer or values rejected by the page; save answers to the profile and site learning records, and add AI recognition corrections |
-| AI Page Scan | Match the page as structured form blocks and keep every education, work, or project block bound to one profile record |
-| AI Region Fill | Select a form area and use a vision-capable model to fill only the empty controls in that area |
+| Fill current page | Every automatic binding is decided by the configured model, checked against saved fact and option IDs, then independently verified |
+| Task panel | One panel across frames; separate counts for automatic, assisted, preserved and skipped fields; stop at any time |
+| Review queue | Recheck unconfirmed dates, locate dropdowns, confirm meanings or records, and supply missing facts |
+| Region filling | A secondary entry uses the same protocol for a selected area; no vision model required |
 | Information panel | Focus a web form control and write one saved profile value at a time; rejected values are copied automatically |
-| Resume library | Store role-specific resumes with independent parsed profiles and original filenames; switching a resume updates overlay data, autofill values, and file upload together |
+| Resume library | Store role-specific resumes with independent parsed profiles and original filenames; profile source and attachment are selected independently |
 | Resume parsing | Import PDF, DOCX, Markdown, TXT, and structured JSON resumes |
-| Application tracker | Create, filter, sort, edit, delete, and import/export application records as CSV |
 | Backup and sync | Versioned JSON import/export and optional conflict-aware WebDAV synchronization |
 
 ## Install
@@ -65,56 +61,32 @@ npm run package:extension
 ### 1. Set up your profile
 
 1. Click the extension icon.
-2. Select **设置个人信息** (Profile Settings).
+2. Select **资料与模型设置** (Profile and model settings).
 3. Enter your personal information, education, work experience, projects, and custom values.
 4. Click **保存设置** (Save Settings).
 
 Add undergraduate and graduate education as separate records. Each record keeps its own school, college/department, major, major category/discipline, study mode, education level, academic degree, and dates. When a form explicitly says undergraduate or graduate, the matching record is selected instead of relying only on list order.
-If a resume did not yield a college, major category, or degree, matching manually maintained education data fills only those missing values without replacing data already parsed from that resume.
+Missing colleges, study modes, degrees and date precision remain missing. Automatic filling requires a configured model. Profile management, local parsing, the manual information assistant and backups remain available without a model.
 
-AI configuration is optional. Regular profile management, local resume parsing, Quick Fill, the information panel, and JSON import/export work without AI.
+### 2. Import and confirm
 
-### 2. Import a resume
+Add a resume in **简历库**. The attachment is saved independently. Review the proposed profile changes and confirm selected items; replacements of existing facts are unchecked by default.
 
-Open **简历库** (Resume Library) in Settings, enter an internal category such as Product or Operations, and add a PDF, DOCX, Markdown, TXT, or structured JSON file. Job ApplyMate preserves the original filename and stores an independent parsed profile for every resume, so adding a new file no longer overwrites existing profile data. AI parsing falls back to local rules after 45 seconds instead of remaining stuck. Choose a resume in the popup to switch the information overlay, Quick Fill, AI Fill, and uploaded file together.
+### 3. Fill a page
 
-Resume deletion is saved immediately. Adding the exact same source file again updates its existing entry instead of creating a duplicate.
+Select **填写当前页面** (Fill current page). The default source is your general profile; optional role-specific profiles appear under **更多**. Choose an attachment separately. The task panel observes the page, requests model decisions, validates fact and record identities, executes supported controls and reads them back. Existing answers are preserved.
 
-### 3. Fill an application form
+Handle outstanding items through recheck, locate, meaning/record confirmation, missing fact entry or skip. Saving a fact is independent of whether the page accepts it. Explicit semantic corrections are scoped to the website, form structure and profile/registry versions, and can be disabled or deleted in Settings. Manual actions are counted separately.
 
-1. Open a job application or resume form.
-2. Click the Job ApplyMate icon.
-3. In **本次简历** (Resume for this fill), choose no automatic upload or one categorized resume.
-4. Select **快速填充** (Quick Fill). Only the explicitly selected resume is uploaded.
-5. Review all values written to the page.
-6. If a recognized question has no saved answer, or a value was rejected, use the review panel in the lower-right corner:
-   - enter the answer and choose **填写并记住** (Fill and Remember); a newly missing answer is also saved to the profile so semantically equivalent fields on other sites can reuse it;
-   - choose **本次不填** (Skip This Time) for one item; or
-   - choose **本次全部不填** (Skip All This Time).
+The configured model endpoint is the only endpoint used. A model failure never falls back to rule-based automatic writing. New sessions always obtain model decisions. The first implementation uses the existing LLM connector through a provider interface; Laya integration and comparative accuracy/latency measurements remain a later phase. Complex cascaders may require manual selection.
 
-Learned values are isolated by website and logical field. When a correction matches a saved profile value, Job ApplyMate remembers the profile path as well, so later profile edits can flow into the learned field instead of reusing stale text.
+### 4. Other actions
 
-Use **AI 识别纠错** (AI Recognition Correction) when the model misunderstood a field. For example, if “Emergency contact phone” was treated as the candidate's own phone, explain that it belongs to the emergency contact and save the correction. These notes are added to the extension's editable **AI Field Recognition Skill (Markdown)** and automatically included in later AI prompts. The complete Markdown can be edited or reset under **AI Settings**; [`AI_FIELD_RECOGNITION_SKILL.md`](AI_FIELD_RECOGNITION_SKILL.md) is the readable built-in template.
+**更多 → 只填某一区域** selects a region with the same decision protocol. Press `Esc` to cancel selection. **打开资料** opens the manual information assistant: focus a page control and click a saved value. The task panel offers safe undo and an explicit diagnostic export without profile values or full page HTML.
 
-Non-standard answers learned through this review appear in a separate **缺失信息填补** (Missing Information) section of the fill panel. They remain stored under **自定义信息** (Custom Information) in Settings, where they can be edited later.
+A navigation requires starting another session. The extension never submits applications.
 
-### 4. Use AI Page Scan
-
-Configure an AI provider in **AI 设置**, open an application page, choose no resume or a specific file in **本次简历**, and select **AI 扫描填充**. Job ApplyMate first fills fields covered by local rules and learned corrections, then asks AI for each remaining field and commits every verified answer immediately. Cancelling or timing out keeps the values already written. Verified results are cached for the same site, profile, and field. Resume files, extracted resume text, and internal record IDs are excluded from page-scan requests. Existing non-empty fields are not overwritten.
-
-### 5. Use AI Region Fill
-
-Configure a vision-capable model and select **AI 框选补填**. Click a detected form section or drag a custom rectangle. Only empty writable controls inside that area are considered. Press `Esc` to cancel region selection.
-
-### 6. Use the information panel
-
-Select **打开信息浮窗** to pin the panel directly inside the current application page. You can drag it and its position is remembered. Focus an input, textarea, or dropdown, then click a value in the panel. If the site rejects direct writing, the value is copied so you can paste it manually.
-
-### 7. Track applications
-
-Use **新建投递记录** to save the current position, or **打开投递记录** to view all records. Records support sorting, filtering, inline editing, deletion, and CSV import/export.
-
-### 8. Backup and restore
+### 7. Backup and restore
 
 Open **数据与同步**:
 

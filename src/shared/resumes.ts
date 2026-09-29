@@ -38,19 +38,12 @@ function normalizeEducation(
     major: value.major || '',
     majorCategory: value.majorCategory || '',
     degree: normalizeEducationLevel(value.degree),
-    academicDegree: value.academicDegree || inferAcademicDegree(value.degree),
+    academicDegree: value.academicDegree || '',
     startDate: value.startDate || '',
     endDate: value.endDate || '',
     gpa: value.gpa || '',
     ranking: value.ranking || '',
   };
-}
-
-function inferAcademicDegree(degree?: string): string {
-  if (/博士/.test(degree || '')) return '博士';
-  if (/硕士|研究生/.test(degree || '')) return '硕士';
-  if (/本科|学士/.test(degree || '')) return '学士';
-  return '';
 }
 
 function normalizeEducationLevel(degree?: string): string {

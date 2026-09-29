@@ -1,18 +1,15 @@
 import type {
-  ApplicationRecord,
   BackupData,
   BackupDocument,
   SyncAction,
   SyncResultStatus,
   WebDAVConfig,
 } from './types';
-import { serializeApplicationRecordsCsv } from './applicationRecords.ts';
 import { createBackupDocument, createBackupSummary, parseAndValidateBackup, serializeBackup } from './backup.ts';
 import { StorageService } from './storage.ts';
 import { LEGACY_RESUME_ID } from './resumes.ts';
 import {
   getRemoteDocument,
-  putRemoteApplicationRecordsCsv,
   putRemoteDocument,
   WebDAVError,
 } from '../services/webdav.ts';
@@ -126,22 +123,12 @@ async function completeSync(hash: string, etag?: string): Promise<void> {
   });
 }
 
-async function syncApplicationRecordsCsvSidecar(
-  records: ApplicationRecord[],
-  config: WebDAVConfig | null,
-  force = false,
-): Promise<void> {
-  if (!config || (!config.enabled && !force)) return;
-  await putRemoteApplicationRecordsCsv(config, serializeApplicationRecordsCsv(records));
-}
-
 async function upload(
   data: BackupData,
   localHash: string,
   etag: string | undefined,
   create: boolean,
   config: WebDAVConfig,
-  forceSidecarUpload = false,
 ): Promise<void> {
   if (!create && !etag) {
     throw new WebDAVError(
@@ -166,7 +153,6 @@ async function upload(
       '远端服务未提供 ETag，数据已上传但无法继续安全同步；请改用支持 ETag 的 WebDAV 服务',
     );
   }
-  await syncApplicationRecordsCsvSidecar(data.applicationRecords ?? [], config, forceSidecarUpload);
   await completeSync(localHash, nextEtag);
 }
 
@@ -201,25 +187,19 @@ export async function performSync(reason: string): Promise<SyncResultStatus> {
       remote.exists,
     );
     if (action === 'create-remote') {
-      await upload(localData, localHash, undefined, true, config, isManualSync);
+      await upload(localData, localHash, undefined, true, config);
     } else if (action === 'no-change') {
-      await syncApplicationRecordsCsvSidecar(localData.applicationRecords ?? [], config, isManualSync);
       await completeSync(localHash, remote.etag);
     } else if (action === 'upload-local') {
-      await upload(localData, localHash, remote.etag, false, config, isManualSync);
+      await upload(localData, localHash, remote.etag, false, config);
     } else if (action === 'download-remote' && remoteDocument) {
       await StorageService.applyRemoteBusinessData(remoteDocument.data);
       const effectiveLocalData = await StorageService.getBackupData();
       const effectiveHash = await sha256BusinessData(effectiveLocalData);
       if (effectiveHash === remoteHash) {
-        await syncApplicationRecordsCsvSidecar(
-          effectiveLocalData.applicationRecords ?? [],
-          config,
-          isManualSync,
-        );
         await completeSync(effectiveHash, remote.etag);
       } else {
-        await upload(effectiveLocalData, effectiveHash, remote.etag, false, config, isManualSync);
+        await upload(effectiveLocalData, effectiveHash, remote.etag, false, config);
       }
     } else if (remoteDocument) {
       await StorageService.saveSyncMetadata({
@@ -273,7 +253,7 @@ async function performForceUploadLocal(): Promise<SyncResultStatus> {
       getRemoteDocument(config),
     ]);
     const localHash = await sha256BusinessData(localData);
-    await upload(localData, localHash, remote.etag, !remote.exists, config, true);
+    await upload(localData, localHash, remote.etag, !remote.exists, config);
     return 'synced';
   } catch (error) {
     return await setError(error, '上传失败');
@@ -298,10 +278,9 @@ async function performForceDownloadRemote(): Promise<SyncResultStatus> {
     const effectiveHash = await sha256BusinessData(effectiveLocalData);
     const remoteHash = await sha256BusinessData(parsed.document.data);
     if (effectiveHash === remoteHash) {
-      await syncApplicationRecordsCsvSidecar(effectiveLocalData.applicationRecords ?? [], config, true);
       await completeSync(effectiveHash, remote.etag);
     } else {
-      await upload(effectiveLocalData, effectiveHash, remote.etag, false, config, true);
+      await upload(effectiveLocalData, effectiveHash, remote.etag, false, config);
     }
     return 'synced';
   } catch (error) {

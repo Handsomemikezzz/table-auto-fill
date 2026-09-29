@@ -1,6 +1,8 @@
+import type { ControlExperience, AdditionalFact, FieldObservation, MeaningCorrection } from '../autofill/contracts.ts';
 import type { ControlOption } from './fillModel.ts';
 // 用户资料数据模型
 export interface UserProfile {
+  additionalFacts?: AdditionalFact[];
   personal: PersonalInfo;
   education: EducationInfo[];
   experience: ExperienceInfo[];
@@ -123,7 +125,8 @@ export interface BackupData {
   userProfile: UserProfile | null;
   llmConfig: LLMConfig | null;
   settings: SettingsData | null;
-  applicationRecords?: ApplicationRecord[] | null;
+  /** Opaque legacy backup data; the application-tracking feature has been removed. */
+  applicationRecords?: Record<string, unknown>[] | null;
 }
 
 export interface BackupDocumentV1 {
@@ -196,39 +199,6 @@ export interface SyncMetadata {
   lastError?: string;
   conflict?: SyncConflictSummary;
 }
-
-export type ApplicationRecordStatus =
-  | '待投递'
-  | '已投递'
-  | '已笔试'
-  | '面试中'
-  | 'offer'
-  | '终止';
-
-export interface ApplicationPageMetadata {
-  companyName: string;
-  sourceSite: string;
-  sourceUrl: string;
-  pageTitle?: string;
-  jobTitle?: string;
-  location?: string;
-}
-
-export interface ApplicationRecord {
-  id: string;
-  companyName: string;
-  jobTitle: string;
-  sourceSite: string;
-  sourceUrl: string;
-  status: ApplicationRecordStatus;
-  notes: string;
-  appliedAt: string;
-  location: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export type ApplicationRecordDraft = Omit<ApplicationRecord, 'id'>;
 
 export type SyncAction =
   | 'create-remote'
@@ -341,6 +311,20 @@ export interface VisualRegionFillMappingResult {
 
 // 消息类型定义
 export type Message =
+  | { type: 'FILL_PAGE_BRIDGE'; payload: Record<string, any> }
+  | { type: 'FILL_LOCAL_BRIDGE'; payload: Record<string, any> }
+  | { type: 'BEGIN_FILL_SESSION'; payload: { sessionId: string; sourceId: string; origin: string; attachmentId?: string | null } }
+  | { type: 'DECIDE_FILL_FIELDS'; payload: { sessionId: string; fields: FieldObservation[]; corrections?: MeaningCorrection[] } }
+  | { type: 'END_FILL_SESSION'; payload: { sessionId: string } }
+  | { type: 'SAVE_MEANING_CORRECTION'; payload: MeaningCorrection }
+  | { type: 'GET_CONTROL_EXPERIENCES'; payload?: null }
+  | { type: 'SAVE_CONTROL_EXPERIENCES'; payload: ControlExperience[] }
+  | { type: 'UPDATE_CONTROL_EXPERIENCE'; payload: { id: string; enabled?: boolean; remove?: boolean } }
+  | { type: 'GET_MEANING_CORRECTIONS'; payload?: null }
+  | { type: 'UPDATE_MEANING_CORRECTION'; payload: { id: string; enabled?: boolean; remove?: boolean } }
+  | { type: 'SAVE_ADDITIONAL_FACT'; payload: { fact: AdditionalFact; profileVersion: string } }
+  | { type: 'START_FILL_SESSION'; payload: { sourceId: string; attachmentId?: string | null; region?: boolean } }
+  | { type: 'OPEN_PROFILE_SETTINGS'; payload?: null }
   | { type: 'GET_USER_PROFILE'; payload?: null }
   | { type: 'SAVE_USER_PROFILE'; payload: UserProfile }
   | { type: 'PARSE_RESUME'; payload: { file: string; fileType: string; fileName: string; category?: string; rawText?: string } }
@@ -367,15 +351,6 @@ export type Message =
       type: 'SAVE_FIELD_RECOGNITION_HINT';
       payload: { domain: string; signature: string; label: string; hint: string };
     }
-  | { type: 'GET_APPLICATION_PAGE_METADATA'; payload?: null }
-  | { type: 'CREATE_APPLICATION_RECORD_DRAFT'; payload: { tabId: number } }
-  | { type: 'GET_APPLICATION_RECORD_DRAFT'; payload: { draftId: string } }
-  | { type: 'GET_APPLICATION_RECORDS'; payload?: null }
-  | { type: 'CREATE_APPLICATION_RECORD'; payload: ApplicationRecord }
-  | { type: 'UPDATE_APPLICATION_RECORD'; payload: ApplicationRecord }
-  | { type: 'DELETE_APPLICATION_RECORD'; payload: { id: string } }
-  | { type: 'EXPORT_APPLICATION_RECORDS_CSV'; payload?: null }
-  | { type: 'IMPORT_APPLICATION_RECORDS_CSV'; payload: { csv: string } }
   | { type: 'START_AI_PAGE_FILL'; payload?: { resumeId?: string | null } | null }
   | { type: 'DETECT_FIELDS'; payload?: null }
   | { type: 'START_AI_REGION_FILL'; payload?: VisualRegionControlPayload | null }

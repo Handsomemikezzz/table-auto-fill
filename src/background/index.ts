@@ -1,3 +1,7 @@
+import { createProfileImportDraft } from '../autofill/profileImport.ts';
+import { bridgeFillPage } from './fillPageBridge.ts';
+import { beginFillSession, decideFillFields, endFillSession, getCorrections, changeCorrection, getExperiences, saveExperiences, changeExperience, isPageOrigin } from './fillSessions.ts';
+import { createProfileSnapshot, saveConfirmedFact } from '../autofill/profileSnapshot.ts';
 import { validateFieldMappings, type GroundedMapping } from '../services/llm/fieldMapping.ts';
 import type {
   FocusedFieldWriteResult,
@@ -55,16 +59,6 @@ import {
   getFieldRecognitionRules,
   upsertFieldRecognitionHint,
 } from '../shared/fieldRecognitionRules.ts';
-import {
-  handleCreateApplicationRecord,
-  handleCreateApplicationRecordDraft,
-  handleDeleteApplicationRecord,
-  handleExportApplicationRecordsCsv,
-  handleGetApplicationRecordDraft,
-  handleGetApplicationRecords,
-  handleImportApplicationRecordsCsv,
-  handleUpdateApplicationRecord,
-} from './applicationRecords.ts';
 import {
   captureVisibleRegion,
   handleVisualRegionFill,
@@ -254,6 +248,46 @@ export async function handleMessage(
   sender: chrome.runtime.MessageSender
 ): Promise<MessageResponse> {
   switch (message.type) {
+    case 'FILL_PAGE_BRIDGE':
+      return { success: true, data: await bridgeFillPage(message.payload, sender) };
+    case 'BEGIN_FILL_SESSION':
+      return { success: true, data: await beginFillSession(message.payload, sender) };
+    case 'DECIDE_FILL_FIELDS':
+      return { success: true, data: await decideFillFields(message.payload, sender) };
+    case 'END_FILL_SESSION':
+      endFillSession(message.payload.sessionId, sender);
+      return { success: true };
+    case 'GET_CONTROL_EXPERIENCES':
+      return { success: true, data: await getExperiences() };
+    case 'SAVE_CONTROL_EXPERIENCES': {
+      if (!sender.url) return { success: false, error: '控件来源无效' };
+      const origins = await Promise.all([...new Set(message.payload.map(item => item.origin))].map(async origin => await isPageOrigin(origin, sender) ? origin : ''));
+      await saveExperiences(message.payload.filter(item => origins.includes(item.origin) && item.verifiedAt && ['write', 'select'].includes(item.action)).map(item => ({ id: item.id, origin: item.origin, signature: item.signature, registryVersion: item.registryVersion, profileVersion: item.profileVersion, adapterId: item.adapterId, action: item.action, modelId: item.modelId, verifiedAt: item.verifiedAt, enabled: item.enabled })));
+      return { success: true };
+    }
+    case 'UPDATE_CONTROL_EXPERIENCE':
+      await changeExperience(message.payload);
+      return { success: true };
+    case 'GET_MEANING_CORRECTIONS':
+      return { success: true, data: await getCorrections() };
+    case 'SAVE_MEANING_CORRECTION':
+      if (!message.payload.confirmedAt || !await isPageOrigin(message.payload.origin, sender)) return { success: false, error: '纠错作用范围无效' };
+      await changeCorrection(message.payload);
+      await queueAutoSync('meaning-correction');
+      return { success: true };
+    case 'UPDATE_MEANING_CORRECTION':
+      await changeCorrection(message.payload);
+      return { success: true };
+    case 'SAVE_ADDITIONAL_FACT': {
+      const profile = await StorageService.getUserProfile();
+      if (!profile || createProfileSnapshot(profile).version !== message.payload.profileVersion) return { success: false, error: '资料已更新，请重新打开资料后保存' };
+      const fact = message.payload.fact;
+      if (!fact.id || !fact.label.trim() || !fact.value.trim() || !fact.subject.trim() || !fact.meaningId || !['text', 'date'].includes(fact.valueType)) return { success: false, error: '请确认含义、主体和答案' };
+      return handleSaveUserProfile(saveConfirmedFact(profile, fact));
+    }
+    case 'OPEN_PROFILE_SETTINGS':
+      await chrome.runtime.openOptionsPage();
+      return { success: true };
     case 'GET_USER_PROFILE':
       return await handleGetUserProfile();
 
@@ -285,42 +319,6 @@ export async function handleMessage(
         message.payload.fileName,
         message.payload.category,
         message.payload.rawText
-      );
-
-    case 'CREATE_APPLICATION_RECORD_DRAFT':
-      return await handleCreateApplicationRecordDraft(message.payload.tabId);
-
-    case 'GET_APPLICATION_RECORD_DRAFT':
-      return await handleGetApplicationRecordDraft(message.payload.draftId);
-
-    case 'GET_APPLICATION_RECORDS':
-      return await handleGetApplicationRecords();
-
-    case 'CREATE_APPLICATION_RECORD':
-      return await handleApplicationRecordMutation(
-        () => handleCreateApplicationRecord(message.payload),
-        'application-record-create',
-      );
-
-    case 'UPDATE_APPLICATION_RECORD':
-      return await handleApplicationRecordMutation(
-        () => handleUpdateApplicationRecord(message.payload),
-        'application-record-update',
-      );
-
-    case 'DELETE_APPLICATION_RECORD':
-      return await handleApplicationRecordMutation(
-        () => handleDeleteApplicationRecord(message.payload.id),
-        'application-record-delete',
-      );
-
-    case 'EXPORT_APPLICATION_RECORDS_CSV':
-      return await handleExportApplicationRecordsCsv();
-
-    case 'IMPORT_APPLICATION_RECORDS_CSV':
-      return await handleApplicationRecordMutation(
-        () => handleImportApplicationRecordsCsv(message.payload.csv),
-        'application-record-import',
       );
 
     case 'GET_RESUME_DATA':
@@ -403,17 +401,6 @@ export async function handleMessage(
         error: 'Unknown message type'
       };
   }
-}
-
-async function handleApplicationRecordMutation(
-  operation: () => Promise<MessageResponse>,
-  reason: string,
-): Promise<MessageResponse> {
-  const response = await operation();
-  if (response.success) {
-    await queueAutoSync(reason);
-  }
-  return response;
 }
 
 async function handleWriteFocusedField(
@@ -636,7 +623,7 @@ function handleCancelAIFill(requestId: string): MessageResponse {
 async function handleGetUserProfile(): Promise<MessageResponse<UserProfile>> {
   try {
     const storedProfile = await StorageService.getUserProfile();
-    const profile = storedProfile ? await ensureResumeProfileSnapshots(storedProfile) : null;
+    const profile = storedProfile;
     return {
       success: true,
       data: profile || undefined
@@ -647,30 +634,6 @@ async function handleGetUserProfile(): Promise<MessageResponse<UserProfile>> {
       error: error instanceof Error ? error.message : 'Failed to get user profile'
     };
   }
-}
-
-/** 旧版简历库只有 parsedText；升级后用本地规则补齐每份简历的独立资料快照。 */
-async function ensureResumeProfileSnapshots(profile: UserProfile): Promise<UserProfile> {
-  let changed = false;
-  const resumes = getResumeLibrary(profile).map(resume => {
-    if (resume.parsedProfile || !resume.parsedText?.trim()) return resume;
-    try {
-      const migrated = {
-        ...resume,
-        parsedProfile: createResumeProfileSnapshot(NLPHelper.parseResumeText(resume.parsedText)),
-      };
-      changed = true;
-      return migrated;
-    } catch (error) {
-      console.warn(`Failed to migrate parsed profile for ${resume.fileName}:`, error);
-      return resume;
-    }
-  });
-  if (!changed) return profile;
-
-  const migrated = { ...profile, resumes };
-  await StorageService.saveUserProfile(migrated);
-  return migrated;
 }
 
 // 保存用户资料
@@ -691,36 +654,6 @@ async function handleSaveUserProfile(
       error: error instanceof Error ? error.message : 'Failed to save user profile'
     };
   }
-}
-
-/** 去掉空字符串/空白值，避免解析结果把已填字段清空 */
-function dropEmptyValues<T extends object>(source: T | undefined): Partial<T> {
-  if (!source) return {};
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(source)) {
-    if (typeof value === 'string' && !value.trim()) continue;
-    if (value === null || value === undefined) continue;
-    result[key] = value;
-  }
-  return result as Partial<T>;
-}
-
-/**
- * 解析结果为空数组时保留原有内容。
- * 直接用 `parsed || current` 不行：空数组是真值，会把已有记录清空。
- */
-function pickNonEmpty<T>(parsed: T[] | undefined, current: T[] | undefined): T[] {
-  if (parsed && parsed.length > 0) return parsed;
-  return current || [];
-}
-
-function hasMeaningfulProfileData(profile: UserProfile | null): boolean {
-  if (!profile) return false;
-  return Object.values(profile.personal || {}).some(value => typeof value === 'string' && value.trim())
-    || profile.education.length > 0
-    || profile.experience.length > 0
-    || profile.projects.length > 0
-    || profile.skills.length > 0;
 }
 
 // 解析简历
@@ -744,7 +677,7 @@ async function handleParseResume(
       parseMethod = 'structured';
     } else {
       const llmConfig = await StorageService.getLLMConfig();
-      if (llmConfig?.apiKey) {
+      if (llmConfig?.baseUrl?.trim() && llmConfig.model?.trim() && (llmConfig.apiKey || llmConfig.provider === 'custom')) {
         const controller = new AbortController();
         let timedOut = false;
         const timeoutId = setTimeout(() => {
@@ -783,8 +716,6 @@ async function handleParseResume(
       parsedProfile: createResumeProfileSnapshot(parsedData),
     });
     const currentLibrary = getResumeLibrary(currentProfile || {});
-    const shouldSeedDefaultProfile = !hasMeaningfulProfileData(currentProfile)
-      && currentLibrary.length === 0;
     const baseProfile: UserProfile = currentProfile || {
       personal: {} as UserProfile['personal'],
       education: [],
@@ -796,22 +727,6 @@ async function handleParseResume(
     };
     const updatedProfile: UserProfile = {
       ...baseProfile,
-      // 第一份简历仍可建立初始资料；后续简历只保存自己的快照，不覆盖全局资料。
-      personal: shouldSeedDefaultProfile
-        ? { ...baseProfile.personal, ...dropEmptyValues(parsedData.personal) } as UserProfile['personal']
-        : baseProfile.personal,
-      education: shouldSeedDefaultProfile
-        ? pickNonEmpty(parsedData.education, baseProfile.education) as UserProfile['education']
-        : baseProfile.education,
-      experience: shouldSeedDefaultProfile
-        ? pickNonEmpty(parsedData.experience, baseProfile.experience) as UserProfile['experience']
-        : baseProfile.experience,
-      projects: shouldSeedDefaultProfile
-        ? pickNonEmpty(parsedData.projects, baseProfile.projects) as UserProfile['projects']
-        : baseProfile.projects,
-      skills: shouldSeedDefaultProfile
-        ? pickNonEmpty(parsedData.skills, baseProfile.skills)
-        : baseProfile.skills,
       // resume 继续保留为旧版本兼容入口，但不再随每次新增而改写。
       resume: baseProfile.resume || resume,
       resumes: upsertResumeVariant(currentLibrary, resume),
@@ -827,6 +742,7 @@ async function handleParseResume(
       success: true,
       data: {
         parsedData,
+        importDraft: createProfileImportDraft(baseProfile, parsedData),
         rawText,
         parseMethod,
         llmError
@@ -1105,7 +1021,7 @@ async function handleTestWebDAV(config: WebDAVConfig): Promise<MessageResponse> 
 async function handleTestConnection(payload?: LLMConfig | null): Promise<MessageResponse> {
   try {
     const config = payload ?? await StorageService.getLLMConfig();
-    if (!config?.apiKey?.trim()) {
+    if (!config?.apiKey?.trim() && config?.provider !== 'custom') {
       return { success: false, error: '请先填写 API Key' };
     }
     if (!config.baseUrl?.trim()) {

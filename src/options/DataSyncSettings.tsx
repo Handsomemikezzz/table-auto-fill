@@ -196,7 +196,7 @@ export function DataSyncSettings({ onDataChanged }: Props) {
         <div className="data-section-heading">
           <div>
             <h2 className="settings-section-title">本地 JSON 备份</h2>
-            <p className="settings-description">导入或导出个人资料、简历原文件、AI 配置和通用设置，不包含投递记录。</p>
+            <p className="settings-description">导入或导出个人资料、简历原文件、AI 配置和通用设置。</p>
           </div>
           <div className="data-heading-actions">
             <button
@@ -239,7 +239,7 @@ export function DataSyncSettings({ onDataChanged }: Props) {
         <div className="data-section-heading">
           <div>
             <h2 className="settings-section-title">WebDAV 同步</h2>
-            <p className="settings-description">以 ETag 条件请求安全同步同一份明文 JSON；投递记录会额外保留一份 CSV 副本；凭据仅保存在本机。</p>
+            <p className="settings-description">以 ETag 条件请求安全同步同一份明文 JSON；凭据仅保存在本机。</p>
           </div>
           <span className={`sync-status sync-status-${metadata.status}`}>
             {STATUS_LABELS[metadata.status]}

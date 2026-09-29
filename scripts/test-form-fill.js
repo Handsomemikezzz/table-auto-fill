@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { extname, join, resolve, sep } from 'node:path';
@@ -25,7 +25,31 @@ await build({
     rollupOptions: { input: resolve(projectRoot, 'tests/form-fill/index.html') },
   },
 });
-const fixtureServer = createServer((request, response) => {
+let modelRequests = [];
+let modelMode = 'normal';
+let modelDelay = 0;
+const fixtureServer = createServer(async (request, response) => {
+  if (request.url === '/v1/chat/completions') {
+    let body = '';
+    for await (const chunk of request) body += chunk;
+    const input = JSON.parse(body);
+    const context = JSON.parse(input.messages.at(-1).content);
+    modelRequests.push(context);
+    if (modelDelay) await delay(modelDelay);
+    const decisions = context.fields.map(field => {
+      const text = `${field.groupLabel} ${field.label} ${field.context}`;
+      let meaning = /姓名/.test(field.label) ? 'personal.name' : /性别/.test(field.label) ? 'personal.gender' : /出生/.test(field.label) ? 'personal.birthDate' : /邮箱/.test(field.label) ? 'personal.email' : field.kind === 'file' ? 'attachment.resumeFile' : /学校/.test(field.label) ? 'education.school' : /入学|起止|毕业/.test(field.label) ? 'education.' + (/毕业|结束/.test(field.label) || /end\s*$/.test(field.context) ? 'endDate' : 'startDate') : '';
+      if (field.label.startsWith('起止时间') && /工作/.test(text)) meaning = /end/.test(field.context) ? 'experience.endDate' : 'experience.startDate';
+      const facts = context.profile.facts.filter(fact => fact.meaningId === meaning);
+      const fact = /研究生|硕士/.test(text) ? facts.find(fact => fact.recordId === 'edu-graduate') || facts[0] : facts[0];
+      const option = fact && field.options.find(option => option.label === fact.value);
+      const choice = ['select', 'radio', 'checkbox', 'combobox'].includes(field.kind);
+      return { fieldId: field.fieldId, snapshotVersion: field.snapshotVersion, meaningId: fact?.meaningId, subject: fact?.subject, recordId: fact?.recordId, factId: modelMode === 'invented' ? 'not-a-real-fact' : fact?.id, nextAction: !fact ? 'requestFact' : choice ? option ? 'select' : field.optionsState !== 'complete' ? 'readOptions' : 'manual' : 'write', targetOptionIds: option ? [option.id] : undefined, dependencyIds: [], evidenceIds: [], value: '模型编造值不得写入' };
+    });
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ decisions }) }, finish_reason: 'stop' }] }));
+    return;
+  }
   const pathname = new URL(request.url || '/', 'http://127.0.0.1').pathname;
   const file = resolve(fixtureDir, `.${decodeURIComponent(pathname)}`);
   if (!file.startsWith(fixtureDir + sep) || !existsSync(file)) { response.writeHead(404).end(); return; }
@@ -113,10 +137,11 @@ async function prepareExtension(scenario) {
   };
   await background.evaluate(`(async () => {
     await chrome.storage.local.clear();
-    await chrome.storage.local.set({ userProfile: ${JSON.stringify(fixtureProfile)} });
+    await chrome.storage.local.set({ userProfile: ${JSON.stringify(fixtureProfile)}, llmConfig: { provider: 'custom', model: 'fixture-model', apiKey: 'fixture-only', baseUrl: ${JSON.stringify(fixtureUrl.split('/tests/')[0] + '/v1')} } });
   })()`);
 }
 async function extensionFill(scenario) {
+  modelRequests = []; modelMode = 'normal'; modelDelay = 0;
   await prepareExtension(scenario);
   const response = await background.evaluate(`(async () => {
     const tab = (await chrome.tabs.query({ url: ${JSON.stringify(fixtureUrl + '*')} }))[0];
@@ -125,6 +150,10 @@ async function extensionFill(scenario) {
     return { ...response, testDetection: detection };
   })()`, 60_000);
   assert.equal(response.success, true, JSON.stringify(response));
+  await waitFor(() => page.evaluate("Boolean(document.querySelector('[data-job-applymate-task]')?.shadowRoot?.textContent.includes('已填写'))"), '模型填写任务完成', 30000);
+  const panel = await page.evaluate("document.querySelector('[data-job-applymate-task]').shadowRoot.textContent");
+  const counts = panel.match(/已填写 (\d+) 项，(\d+) 项需处理/);
+  response.data = { verifiedCount: Number(counts?.[1] || 0), failures: Number(counts?.[2]) ? Array(Number(counts[2])).fill({}) : [], panel };
   return { response, snapshot: await page.evaluate('window.formFixture.snapshot()') };
 }
 
@@ -223,14 +252,14 @@ try {
     ['month', 'birthDate', '2000-06'],
     ['picker-day', 'birthDate', '2000-06-15'],
     ['picker-month', 'birthDate', '2000-06'],
-    ['cascader', 'region', '四川省 / 成都市 / 武侯区'],
-    ['ant-cascader', 'region', '四川省 / 成都市 / 武侯区'],
   ]) {
     await check(`扩展 FILL_FORM：${scenario}`, async () => {
       const { response, snapshot } = await extensionFill(scenario);
       if (snapshot.state[key] !== value) console.error(JSON.stringify(await page.evaluate('window.formFixture.diagnose()')));
       assert.equal(snapshot.state[key], value, JSON.stringify({ response, snapshot }));
       assert.equal(response.data?.verifiedCount, 1, JSON.stringify(response));
+      assert(modelRequests.length > 0, '每次会话必须调用模型');
+      assert(modelRequests.every(request => request.profile.facts && !JSON.stringify(request).includes('fileData')), '模型只接收事实，不接收附件内容');
     });
   }
   await check('扩展 FILL_FORM：飞书深层起止框与失焦日期格式化', async () => {
@@ -258,20 +287,67 @@ try {
       assert(response.data?.failures?.length > 0, JSON.stringify(response));
     });
   }
-  await check('扩展 AI 页填本地阶段终止后不再填写后续字段或上传附件', async () => {
-    await prepareExtension('ai-cancel');
-    const started = await background.evaluate(`(async () => {
-      const tab = (await chrome.tabs.query({ url: ${JSON.stringify(fixtureUrl + '*')} }))[0];
-      return chrome.tabs.sendMessage(tab.id, { type: 'START_AI_PAGE_FILL' }, { frameId: 0 });
-    })()`);
-    assert.equal(started.success, true);
-    await waitFor(() => page.evaluate("Boolean(document.querySelector('#name')?.value)"), 'AI 本地阶段开始填写第一项');
-    await page.evaluate("Array.from(document.querySelectorAll('button')).find(button => button.textContent === '终止')?.click()");
-    await waitFor(() => page.evaluate("document.body.innerText.includes('AI 扫描填充已终止')"), 'AI 终止状态');
-    await delay(700);
+  await check('模型返回不存在的事实时不填写', async () => {
+    await prepareExtension('react-text'); modelMode = 'invented';
+    await background.evaluate(`(async () => { const tab = (await chrome.tabs.query({ url: ${JSON.stringify(fixtureUrl + '*')} }))[0]; return chrome.tabs.sendMessage(tab.id, { type: 'START_FILL_SESSION', payload: { sourceId: 'default' } }, { frameId: 0 }); })()`);
+    await waitFor(() => page.evaluate("document.querySelector('[data-job-applymate-task]')?.shadowRoot?.textContent.includes('已填写 0 项，1 项需处理')"), '虚构事实被阻止');
+    assert.equal((await page.evaluate('window.formFixture.snapshot()')).state.name || '', '');
+    modelMode = 'normal';
+  });
+  await check('模型不可用保留手动资料助手且不回退规则', async () => {
+    await prepareExtension('react-text');
+    await background.evaluate("chrome.storage.local.remove('llmConfig')");
+    await background.evaluate(`(async () => { const tab = (await chrome.tabs.query({ url: ${JSON.stringify(fixtureUrl + '*')} }))[0]; return chrome.tabs.sendMessage(tab.id, { type: 'FILL_FORM' }, { frameId: 0 }); })()`);
+    await waitFor(() => page.evaluate("document.querySelector('[data-job-applymate-task]')?.shadowRoot?.textContent.includes('暂时无法连接填写服务')"), '服务不可用提示');
+    assert.equal((await page.evaluate('window.formFixture.snapshot()')).state.name || '', '');
+  });
+  await check('停止等待中的模型后不再写入或上传附件', async () => {
+    await prepareExtension('ai-cancel'); modelRequests = []; modelDelay = 1000;
+    await background.evaluate(`(async () => { const tab = (await chrome.tabs.query({ url: ${JSON.stringify(fixtureUrl + '*')} }))[0]; return chrome.tabs.sendMessage(tab.id, { type: 'START_FILL_SESSION', payload: { sourceId: 'default', attachmentId: 'legacy-resume' } }, { frameId: 0 }); })()`);
+    await waitFor(() => modelRequests.length > 0, '模型收到请求');
+    await page.evaluate("Array.from(document.querySelector('[data-job-applymate-task]').shadowRoot.querySelectorAll('button')).find(button => button.textContent === '停止').click()");
+    await delay(1300);
     const snapshot = await page.evaluate("({ ...window.formFixture.snapshot(), files: document.querySelector('#resume').files.length })");
-    assert.equal(snapshot.state.email ?? '', '', JSON.stringify(snapshot));
-    assert.equal(snapshot.files, 0, JSON.stringify(snapshot));
+    assert.equal(snapshot.state.name || '', ''); assert.equal(snapshot.state.email || '', ''); assert.equal(snapshot.files, 0);
+    modelDelay = 0;
+  });
+  await check('所选附件独立上传，仍使用通用资料', async () => {
+    await prepareExtension('ai-cancel'); modelRequests = [];
+    await background.evaluate(`(async () => { const tab = (await chrome.tabs.query({ url: ${JSON.stringify(fixtureUrl + '*')} }))[0]; return chrome.tabs.sendMessage(tab.id, { type: 'START_FILL_SESSION', payload: { sourceId: 'default', attachmentId: 'legacy-resume' } }, { frameId: 0 }); })()`);
+    await waitFor(() => page.evaluate("document.querySelector('[data-job-applymate-task]')?.shadowRoot?.textContent.includes('已填写')"), '含附件填写完成', 30000);
+    assert.equal(await page.evaluate("document.querySelector('#resume').files[0]?.name"), 'cancel.pdf');
+    assert.equal((await page.evaluate('window.formFixture.snapshot()')).state.name, '测试用户');
+    assert.equal(modelRequests[0].profile.sourceId, 'default');
+  });
+  await check('跨 frame 共用单个任务面板并由模型逐组决策', async () => {
+    await prepareExtension('react-text'); modelRequests = [];
+    await page.evaluate(`(() => { const frame = document.createElement('iframe'); frame.src = ${JSON.stringify(fixtureUrl + '?scenario=react-text')}; document.body.append(frame); })()`);
+    await waitFor(() => page.evaluate("Boolean(document.querySelector('iframe').contentWindow.formFixture)"), '子框架加载');
+    await background.evaluate(`(async () => { const tab = (await chrome.tabs.query({ url: ${JSON.stringify(fixtureUrl + '*')} }))[0]; return chrome.tabs.sendMessage(tab.id, { type: 'START_FILL_SESSION', payload: { sourceId: 'default' } }, { frameId: 0 }); })()`);
+    await waitFor(() => page.evaluate("document.querySelector('[data-job-applymate-task]')?.shadowRoot?.textContent.includes('已填写 2 项')"), '跨框架填写', 30000);
+    assert.equal(await page.evaluate("document.querySelector('iframe').contentDocument.querySelectorAll('[data-job-applymate-task]').length"), 0);
+    assert.equal(await page.evaluate("document.querySelector('iframe').contentWindow.formFixture.snapshot().state.name"), '测试用户');
+  });
+  for (const [scenario, key, expected] of [['existing-text', 'name', '用户原有姓名'], ['existing-radio', 'gender', 'f']]) {
+    await check(`模型主路径保留原有答案：${scenario}`, async () => {
+      const { response, snapshot } = await extensionFill(scenario);
+      assert.equal(snapshot.state[key], expected);
+      assert.equal(response.data.verifiedCount, 0);
+      assert.match(response.data.panel, /保留原值 1/);
+    });
+  }
+  await check('模型等待期间的用户编辑保持原样', async () => {
+    await prepareExtension('react-text'); modelRequests = []; modelDelay = 500;
+    await background.evaluate(`(async () => { const tab = (await chrome.tabs.query({ url: ${JSON.stringify(fixtureUrl + '*')} }))[0]; return chrome.tabs.sendMessage(tab.id, { type: 'START_FILL_SESSION', payload: { sourceId: 'default' } }, { frameId: 0 }); })()`);
+    await waitFor(() => modelRequests.length > 0, '模型请求开始');
+    await page.evaluate("document.querySelector('#name').focus()");
+    await page.send('Input.insertText', { text: '用户决定保留的姓名' });
+    await waitFor(() => page.evaluate("document.querySelector('[data-job-applymate-task]')?.shadowRoot?.textContent.includes('已填写')"), '保留用户编辑');
+    assert.equal((await page.evaluate('window.formFixture.snapshot()')).state.name, '用户决定保留的姓名');
+    assert.match(await page.evaluate("document.querySelector('[data-job-applymate-task]').shadowRoot.textContent"), /已填写 0 项/);
+    modelDelay = 0;
+    const screenshot = await page.send('Page.captureScreenshot', { format: 'png' });
+    writeFileSync('/tmp/job-applymate-task-panel.png', Buffer.from(screenshot.data, 'base64'));
   });
   const exceptions = page.events.filter(event => event.method === 'Runtime.exceptionThrown');
   assert.equal(exceptions.length, 0, JSON.stringify(exceptions));

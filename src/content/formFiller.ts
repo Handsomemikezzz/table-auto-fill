@@ -1,6 +1,6 @@
 import { resolveLearnedValue } from '../shared/learnedFields.ts';
 import { parseFlexibleDate } from '../utils/dateValue.ts';
-import { fillControl, verifyControl, type FillContext } from './fillEngine.ts';
+import { fillControl, verifyControl, isAutomatedControlAction, type FillContext } from './fillEngine.ts';
 import { getControlValue, getOptions, getControlLabel, isOptionSelected, observeControl } from './controlObservation.ts';
 import { bindFieldRecords, recordSection, dateRangePart } from './fieldBinding.ts';
 import type { FillOutcome } from '../shared/fillModel.ts';
@@ -27,6 +27,8 @@ export class FormFiller {
     HTMLElement,
     { value: string; choices?: Array<{ element: HTMLElement; checked: boolean }>; selection?: Array<{ value: string; label: string }> }
   >();
+  private userModified = new WeakSet<HTMLElement>();
+  private watched = new WeakSet<Node>();
   private failures = new Map<Element, FillFailure>();
   private outcomes = new Map<HTMLElement, FillOutcome>();
   private intents = new Map<HTMLElement, { value: string; context: FillContext }>();
@@ -36,6 +38,11 @@ export class FormFiller {
     this.failures.clear();
     this.outcomes.clear();
     this.intents.clear();
+  }
+
+  async executeDecision(element: HTMLElement, value: string, context: FillContext): Promise<FillOutcome> {
+    await this.fillField(element, value, context);
+    return this.outcomes.get(element)!;
   }
 
   getLastFailures(): FillFailure[] {
@@ -114,7 +121,7 @@ export class FormFiller {
   async undoLastFill(): Promise<number> {
     let restored = 0;
     for (const [element, snapshot] of [...this.previousValues.entries()].reverse()) {
-      if (!element.isConnected) continue;
+      if (!element.isConnected || this.userModified.has(element)) continue;
       const intent = this.intents.get(element);
       // A user edit after filling belongs to the user and must survive Undo.
       if (!intent || (await verifyControl(element, intent.value, { ...intent.context, shouldContinue: undefined, settleMs: 0 })).status !== 'verified') continue;
@@ -602,6 +609,19 @@ export class FormFiller {
   }
 
   private async fillField(element: HTMLElement, value: string, context: FillContext = {}): Promise<boolean> {
+    const root = element.getRootNode();
+    if (!this.watched.has(root)) {
+      this.watched.add(root);
+      const trackEdit = (event: Event) => {
+        if (!event.isTrusted || isAutomatedControlAction(element.ownerDocument) || !(event.target instanceof Node)) return;
+        for (const control of this.intents.keys()) {
+          if (control === event.target || control.contains(event.target) || observeControl(control).group.some(member => member === event.target)) this.userModified.add(control);
+        }
+      };
+      root.addEventListener('input', trackEdit, true);
+      root.addEventListener('change', trackEdit, true);
+    }
+    this.userModified.delete(element);
     if (!this.previousValues.has(element)) {
       this.previousValues.set(element, {
         value: getControlValue(element),
