@@ -2,7 +2,7 @@ import { AdditionalFactsSection } from './AdditionalFactsSection.tsx';
 import { getPersonalAdditionalFields, PERSONAL_EXTRA_FIELDS } from '../shared/personalFields.ts';
 import { ProfileImportDraft } from './ProfileImportDraft.tsx';
 import { applyProfileImportDraft, type ProfileImportChange } from '../autofill/profileImport.ts';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MessageService } from '../shared/message';
 import type {
   UserProfile,
@@ -17,6 +17,11 @@ import { DataSyncSettings } from './DataSyncSettings';
 import { parsePDF } from '../parsers/pdfParser';
 import { parseDOCX } from '../parsers/docxParser';
 import { removeResumeVariant } from '../shared/resumes.ts';
+
+interface ImportReviewState {
+  parsedData: ParsedResumeData;
+  fileName: string;
+}
 
 const OPTION_TABS = [
   'personal',
@@ -129,6 +134,8 @@ function resizeAutoGrowTextarea(element: HTMLTextAreaElement): void {
 }
 
 function App() {
+  const globalFileInputRef = useRef<HTMLInputElement>(null);
+  const [importReviewData, setImportReviewData] = useState<ImportReviewState | null>(null);
   const [importDraft, setImportDraft] = useState<ProfileImportChange[] | null>(null);
   const [profile, setProfile] = useState<UserProfile>({
     personal: {} as PersonalInfo,
@@ -241,6 +248,30 @@ function App() {
     } catch (error) {
       console.error('Save error:', error);
       setSaveNotice({ type: 'error', text: '保存时出错，请稍后重试' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleApplyImportDraft = async (updated: UserProfile) => {
+    setSaving(true);
+    try {
+      const response = await MessageService.sendMessage({
+        type: 'SAVE_USER_PROFILE',
+        payload: updated,
+      });
+
+      if (response.success) {
+        setProfile(updated);
+        setImportReviewData(null);
+        setImportDraft(null);
+        setSaveNotice({ type: 'success', text: '简历信息已成功导入并保存至个人资料库' });
+      } else {
+        throw new Error(response.error || '保存失败');
+      }
+    } catch (error) {
+      console.error('Failed to apply imported profile:', error);
+      throw error;
     } finally {
       setSaving(false);
     }
@@ -366,6 +397,13 @@ function App() {
           const summary = summarizeParsed(result.parsedData);
           setSaveNotice({ type: 'success', text: '简历已加入资料库，可在插件中切换使用' });
 
+          if (result.parsedData) {
+            setImportReviewData({
+              parsedData: result.parsedData,
+              fileName: file.name,
+            });
+          }
+
           if (result.llmError) {
             // AI 解析失败会静默回退到正则，必须让用户知道，否则会误以为 AI 生效了
             setResumeNotice({
@@ -435,17 +473,41 @@ function App() {
       )}
       <header className="options-header">
         <div className="options-header-inner">
-          <img
-            className="options-brand-mark"
-            src={typeof chrome !== 'undefined' && chrome.runtime?.getURL
-              ? chrome.runtime.getURL('icons/icon128.png')
-              : '/icons/icon128.png'}
-            alt=""
-          />
-          <div>
-            <span className="options-brand-name">JOB APPLYMATE</span>
-            <h1>建立你的申请资料库</h1>
-            <p>一次整理，之后每份网申都能快速、准确地调用。</p>
+          <div className="options-brand-left">
+            <img
+              className="options-brand-mark"
+              src={typeof chrome !== 'undefined' && chrome.runtime?.getURL
+                ? chrome.runtime.getURL('icons/icon128.png')
+                : '/icons/icon128.png'}
+              alt=""
+            />
+            <div>
+              <span className="options-brand-name">JOB APPLYMATE</span>
+              <h1>建立你的申请资料库</h1>
+              <p>一次整理，全网招聘站点一键自动填报与智能纠偏。</p>
+            </div>
+          </div>
+          <div className="options-header-actions">
+            <button
+              type="button"
+              className="header-action-btn"
+              onClick={() => globalFileInputRef.current?.click()}
+              disabled={parsingResume}
+              title="支持 PDF、DOCX、TXT、MD 简历文件"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+              </svg>
+              <span>{parsingResume ? '正在解析简历...' : '从简历一键解析建档'}</span>
+            </button>
+            <input
+              ref={globalFileInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx,.md,.txt,.json"
+              onChange={handleFileUpload}
+              style={{ display: 'none' }}
+              disabled={parsingResume}
+            />
           </div>
         </div>
       </header>
@@ -456,63 +518,98 @@ function App() {
             onClick={() => setActiveTab('personal')}
             className={activeTab === 'personal' ? 'options-tab active' : 'options-tab'}
           >
-            基本信息
+            <span>基本信息</span>
           </button>
           <button
             onClick={() => setActiveTab('education')}
             className={activeTab === 'education' ? 'options-tab active' : 'options-tab'}
           >
-            教育经历
+            <span>教育经历</span>
+            {(profile.education?.length ?? 0) > 0 && (
+              <span className="tab-badge">{profile.education?.length}</span>
+            )}
           </button>
           <button
             onClick={() => setActiveTab('experience')}
             className={activeTab === 'experience' ? 'options-tab active' : 'options-tab'}
           >
-            实习与项目
+            <span>实习与项目</span>
+            {((profile.experience?.length || 0) + (profile.projects?.length || 0) + (profile.skills?.length ? 1 : 0)) > 0 && (
+              <span className="tab-badge">{(profile.experience?.length || 0) + (profile.projects?.length || 0)}</span>
+            )}
           </button>
           <button
             onClick={() => setActiveTab('custom')}
             className={activeTab === 'custom' ? 'options-tab active' : 'options-tab'}
           >
-            添加自定义信息
+            <span>自定义信息</span>
+            {(profile.customInformation?.length ?? 0) > 0 && (
+              <span className="tab-badge">{profile.customInformation?.length}</span>
+            )}
           </button>
           <button
             onClick={() => setActiveTab('resume')}
             className={activeTab === 'resume' ? 'options-tab active' : 'options-tab'}
           >
-            简历库
+            <span>简历库</span>
+            {(profile.resumes?.length ?? 0) > 0 && (
+              <span className="tab-badge">{profile.resumes?.length}</span>
+            )}
           </button>
           <button
             onClick={() => setActiveTab('ai')}
             className={activeTab === 'ai' ? 'options-tab active' : 'options-tab'}
           >
-            AI设置
+            <span>AI设置</span>
           </button>
           <button
             onClick={() => setActiveTab('data-sync')}
             className={activeTab === 'data-sync' ? 'options-tab active' : 'options-tab'}
           >
-            数据与同步
+            <span>数据与同步</span>
           </button>
         </nav>
 
         <div className="options-panel">
           {activeTab === 'personal' && (
             <div className="options-form">
-              <h2 className="section-title">个人基本信息</h2>
-
-              <div style={styles.formGroup}>
-                <label style={styles.label}>姓名 *</label>
-                <input
-                  type="text"
-                  value={profile.personal.name || ''}
-                  onChange={(e) => handlePersonalChange('name', e.target.value)}
-                  style={styles.input}
-                  placeholder="请输入姓名"
-                />
+              <div className="smart-setup-card">
+                <div>
+                  <span className="smart-setup-badge">⚡ 智能建档助手</span>
+                  <h3 className="smart-setup-title">直接从现有简历解析资料库</h3>
+                  <p className="smart-setup-desc">
+                    支持直接上传 PDF、DOCX、Markdown、TXT 格式简历。系统将自动抽取个人信息、教育、工作、项目及技能，并在界面中高亮核对缺失项，一键补全建档。
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="smart-setup-btn"
+                  onClick={() => globalFileInputRef.current?.click()}
+                  disabled={parsingResume}
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                  </svg>
+                  <span>{parsingResume ? '正在解析...' : '上传简历一键提取'}</span>
+                </button>
               </div>
 
-              <div style={styles.formRow}>
+              <h2 className="section-title">个人基本信息</h2>
+
+              <div className="form-grid-2">
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>姓名 *</label>
+                  <input
+                    type="text"
+                    value={profile.personal.name || ''}
+                    onChange={(e) => handlePersonalChange('name', e.target.value)}
+                    style={styles.input}
+                    placeholder="请输入姓名"
+                  />
+                </div>
+
                 <div style={styles.formGroup}>
                   <label style={styles.label}>性别</label>
                   <select
@@ -536,9 +633,7 @@ function App() {
                     placeholder="如 2002年5月 或 2002-05"
                   />
                 </div>
-              </div>
 
-              <div style={styles.formRow}>
                 <div style={styles.formGroup}>
                   <label style={styles.label}>政治面貌</label>
                   <select
@@ -565,42 +660,52 @@ function App() {
                     placeholder="如 汉族"
                   />
                 </div>
-              </div>
 
-              <div style={styles.formGroup}>
-                <label style={styles.label}>手机号 *</label>
-                <input
-                  type="tel"
-                  value={profile.personal.phone || ''}
-                  onChange={(e) => handlePersonalChange('phone', e.target.value)}
-                  style={styles.input}
-                  placeholder="请输入手机号"
-                />
-              </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>身份证号</label>
+                  <input
+                    type="text"
+                    value={profile.personal.idCard || ''}
+                    onChange={(e) => handlePersonalChange('idCard', e.target.value)}
+                    style={styles.input}
+                    placeholder="部分网申需要，可留空"
+                    autoComplete="off"
+                  />
+                </div>
 
-              <div style={styles.formGroup}>
-                <label style={styles.label}>邮箱 *</label>
-                <input
-                  type="email"
-                  value={profile.personal.email || ''}
-                  onChange={(e) => handlePersonalChange('email', e.target.value)}
-                  style={styles.input}
-                  placeholder="请输入邮箱"
-                />
-              </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>手机号 *</label>
+                  <input
+                    type="tel"
+                    value={profile.personal.phone || ''}
+                    onChange={(e) => handlePersonalChange('phone', e.target.value)}
+                    style={styles.input}
+                    placeholder="请输入手机号"
+                  />
+                </div>
 
-              <div style={styles.formGroup}>
-                <label style={styles.label}>微信号</label>
-                <input
-                  type="text"
-                  value={profile.personal.wechat || ''}
-                  onChange={(e) => handlePersonalChange('wechat', e.target.value)}
-                  style={styles.input}
-                  placeholder="请输入微信号"
-                />
-              </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>邮箱 *</label>
+                  <input
+                    type="email"
+                    value={profile.personal.email || ''}
+                    onChange={(e) => handlePersonalChange('email', e.target.value)}
+                    style={styles.input}
+                    placeholder="请输入邮箱"
+                  />
+                </div>
 
-              <div style={styles.formRow}>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>微信号</label>
+                  <input
+                    type="text"
+                    value={profile.personal.wechat || ''}
+                    onChange={(e) => handlePersonalChange('wechat', e.target.value)}
+                    style={styles.input}
+                    placeholder="请输入微信号"
+                  />
+                </div>
+
                 <div style={styles.formGroup}>
                   <label style={styles.label}>籍贯</label>
                   <input
@@ -611,28 +716,16 @@ function App() {
                     placeholder="如 河北省石家庄市"
                   />
                 </div>
-
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>现居地</label>
-                  <input
-                    type="text"
-                    value={profile.personal.currentAddress || ''}
-                    onChange={(e) => handlePersonalChange('currentAddress', e.target.value)}
-                    style={styles.input}
-                    placeholder="如 北京市海淀区"
-                  />
-                </div>
               </div>
 
               <div style={styles.formGroup}>
-                <label style={styles.label}>身份证号</label>
+                <label style={styles.label}>现居地</label>
                 <input
                   type="text"
-                  value={profile.personal.idCard || ''}
-                  onChange={(e) => handlePersonalChange('idCard', e.target.value)}
+                  value={profile.personal.currentAddress || ''}
+                  onChange={(e) => handlePersonalChange('currentAddress', e.target.value)}
                   style={styles.input}
-                  placeholder="部分网申需要，可留空"
-                  autoComplete="off"
+                  placeholder="如 北京市海淀区"
                 />
               </div>
 
@@ -649,21 +742,34 @@ function App() {
                   }}
                   style={{ ...styles.input, ...styles.autoGrowTextarea }}
                   placeholder="简要描述个人优势、能力特点和职业倾向，可用于网申自我评价字段"
-                  rows={1}
+                  rows={2}
                 />
               </div>
 
-              <h3>补充个人资料（选填）</h3>
-              <p>填写后可在不同招聘页面自动使用；没有的信息保持空白即可。</p>
-              {PERSONAL_EXTRA_FIELDS.map(field => <div key={field.key} style={styles.formGroup}>
-                <label style={styles.label} htmlFor={`personal-${field.key}`}>{field.label}</label>
-                <input id={`personal-${field.key}`} value={profile.personal[field.key] || ''} onChange={event => handlePersonalChange(field.key, event.target.value)} style={styles.input} placeholder={`选填${field.label}`} />
-              </div>)}
-              <AdditionalFactsSection facts={getPersonalAdditionalFields(profile)} onChange={additionalFields => setProfile({ ...profile, personal: { ...profile.personal, additionalFields } })} />
+              <h3 style={{ marginTop: '28px', marginBottom: '8px', fontSize: '16px', fontWeight: 650, color: 'var(--color-text)' }}>补充个人资料（选填）</h3>
+              <p style={{ margin: '0 0 16px', fontSize: '13px', color: 'var(--color-muted)' }}>填写后可在不同招聘页面自动使用；没有的信息保持空白即可。</p>
+              <div className="form-grid-2">
+                {PERSONAL_EXTRA_FIELDS.map(field => (
+                  <div key={field.key} style={styles.formGroup}>
+                    <label style={styles.label} htmlFor={`personal-${field.key}`}>{field.label}</label>
+                    <input
+                      id={`personal-${field.key}`}
+                      value={profile.personal[field.key] || ''}
+                      onChange={event => handlePersonalChange(field.key, event.target.value)}
+                      style={styles.input}
+                      placeholder={`选填${field.label}`}
+                    />
+                  </div>
+                ))}
+              </div>
+              <AdditionalFactsSection
+                facts={getPersonalAdditionalFields(profile)}
+                onChange={additionalFields => setProfile({ ...profile, personal: { ...profile.personal, additionalFields } })}
+              />
 
               <div className="info-note">
-                提示：带 * 的为必填项。你也可以通过上传简历来快速填充这些信息。
-                身份证号仅保存在本地浏览器中，不会上传到任何服务器。
+                💡 提示：带 * 的为必填项。你也可以通过上传简历来快速填充这些信息。
+                身份证号等敏感信息仅保存在本地浏览器中，绝不会上传到第三方服务器。
               </div>
             </div>
           )}
@@ -755,14 +861,32 @@ function App() {
             </div>
           )}
 
-          {importDraft && <ProfileImportDraft changes={importDraft} onDismiss={() => setImportDraft(null)} onApply={async changes => {
-            const current = await MessageService.sendMessage<UserProfile>({ type: 'GET_USER_PROFILE' });
-            if (!current.success || !current.data) throw new Error(current.error || '无法读取资料');
-            const updated = applyProfileImportDraft(current.data, changes);
-            const result = await MessageService.sendMessage({ type: 'SAVE_USER_PROFILE', payload: updated });
-            if (!result.success) throw new Error(result.error || '保存失败');
-            setProfile(updated); setImportDraft(null); setSaveNotice({ type: 'success', text: '已保存确认的资料更新' });
-          }} />}
+          {importReviewData && (
+            <ProfileImportDraft
+              parsedData={importReviewData.parsedData}
+              fileName={importReviewData.fileName}
+              currentProfile={profile}
+              onDismiss={() => setImportReviewData(null)}
+              onApply={handleApplyImportDraft}
+            />
+          )}
+          {!importReviewData && importDraft && importDraft.length > 0 && (
+            <ProfileImportDraft
+              changes={importDraft}
+              currentProfile={profile}
+              onDismiss={() => setImportDraft(null)}
+              onApply={async (_updated) => {
+                const current = await MessageService.sendMessage<UserProfile>({ type: 'GET_USER_PROFILE' });
+                if (!current.success || !current.data) throw new Error(current.error || '无法读取资料');
+                const next = applyProfileImportDraft(current.data, importDraft);
+                const result = await MessageService.sendMessage({ type: 'SAVE_USER_PROFILE', payload: next });
+                if (!result.success) throw new Error(result.error || '保存失败');
+                setProfile(next);
+                setImportDraft(null);
+                setSaveNotice({ type: 'success', text: '已保存确认的资料更新' });
+              }}
+            />
+          )}
           {activeTab === 'resume' && (
             <div className="options-form">
               <h2 className="section-title">简历库</h2>
@@ -874,34 +998,34 @@ function App() {
 
 const styles: Record<string, React.CSSProperties> = {
   formGroup: {
-    marginBottom: '20px',
+    marginBottom: '16px',
     flex: 1
   },
   formRow: {
     display: 'flex',
-    gap: '20px'
+    gap: '16px'
   },
   label: {
     display: 'block',
-    marginBottom: '8px',
-    fontSize: '14px',
-    fontWeight: '500',
-    color: '#333'
+    marginBottom: '6px',
+    fontSize: '13px',
+    fontWeight: '600',
+    color: '#334155'
   },
   input: {
     width: '100%',
-    padding: '10px 12px',
+    padding: '9px 12px',
     fontSize: '14px',
     border: '1px solid var(--color-border)',
-    borderRadius: '9px',
+    borderRadius: '8px',
     outline: 'none',
     transition: 'border-color 0.2s',
-    fontFamily: 'inherit'
+    fontFamily: 'inherit',
+    boxSizing: 'border-box'
   },
   autoGrowTextarea: {
-    minHeight: '39px',
-    height: '39px',
-    lineHeight: '18px',
+    minHeight: '44px',
+    lineHeight: '1.6',
     overflowY: 'hidden',
     resize: 'none'
   }

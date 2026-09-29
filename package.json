@@ -9,7 +9,7 @@
     "package:extension": "npm run build && node scripts/package-extension.js",
     "lint": "oxlint",
     "test:extension-smoke": "node scripts/smoke-test-extension.js",
-    "test:options": "tsx --test src/options/DataSyncSettings.test.tsx src/popup/productScope.test.tsx",
+    "test:options": "tsx --test src/options/DataSyncSettings.test.tsx src/options/ProfileImportDraft.test.tsx src/popup/productScope.test.tsx",
     "test:sidepanel": "tsx --test src/sidepanel/basicInfo.test.ts src/sidepanel/ProfileSections.test.ts src/sidepanel/navigation.test.ts src/utils/fieldMatcher.test.ts",
     "test": "node --experimental-strip-types --test src/shared/backup-sync.test.ts src/shared/packageScripts.test.ts src/shared/learnedFields.test.ts src/shared/resumes.test.ts src/utils/resume-parse.test.ts src/utils/dateValue.test.ts src/utils/dropdownOption.test.ts src/services/llm/fieldMatchingCache.test.ts src/services/llm/visionCapabilities.test.ts src/services/llm/llm-service.test.ts src/services/llm/visualRegionFill.test.ts src/background/visualRegionFill.test.ts src/background/contentScriptConnection.test.ts src/content/visualRegionFill.test.ts src/content/controlSemantics.test.ts src/content/progressiveFill.test.ts src/content/infoOverlay.test.ts src/offscreen/imageCrop.test.ts src/parsers/offscreen-routing.test.ts src/content/pageScan.test.ts src/services/llm/fieldMapping.test.ts src/utils/optionResolver.test.ts src/content/datePickerAdapter.test.ts src/content/cascaderAdapter.test.ts src/content/fieldBinding.test.ts && npm run test:sidepanel && npm run test:options && npm run test:autofill",
     "preview": "vite preview",
