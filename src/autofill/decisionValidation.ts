@@ -13,6 +13,10 @@ export function validateDecision(decision: FieldDecision, field: FieldObservatio
   const fact = request.profile.facts.find(fact => fact.id === decision.factId);
   if (decision.nextAction === 'readOptions' && !decision.factId) return {};
   if (!fact || fact.meaningId !== decision.meaningId || fact.subject !== decision.subject || fact.recordId !== decision.recordId) return { error: '资料、含义、主体或经历不一致' };
+  const resolved = field.resolvedBinding;
+  if (resolved && (resolved.factId !== fact.id || resolved.meaningId !== fact.meaningId || resolved.subject !== fact.subject || resolved.recordId !== fact.recordId)) return { error: '选项判断不能改变已确认的资料绑定' };
+  if (request.establishedBindings?.some(binding => binding.groupId === field.groupId && binding.recordId
+    && binding.meaningId.split('.')[0] === fact.meaningId.split('.')[0] && binding.recordId !== fact.recordId)) return { error: '同组经历已绑定其他记录' };
   if (fact.conflict) return { error: fact.conflict };
   const confirmed = request.corrections.filter(item => item.enabled && item.signature === field.signature && item.profileVersion === request.profile.version && item.registryVersion === request.registryVersion).at(-1);
   if (confirmed && (confirmed.meaningId !== fact.meaningId || (confirmed.recordId && confirmed.recordId !== fact.recordId))) return { error: '决策与用户确认的含义或经历不一致' };

@@ -6,6 +6,10 @@ import { FieldMatcher } from './fieldMatcher.ts';
 function match(name: string, context = ''): FieldType {
   return FieldMatcher.matchFieldType(name, '', '', '', 'text', '', context).fieldType;
 }
+test('首次参加工作时间不能绑定某一段工作经历的开始日期', () => {
+  for (const label of ['开始工作年月', '首次参加工作时间', 'first employment date']) assert.equal(match(label, '个人信息'), FieldType.UNKNOWN);
+  assert.equal(match('工作开始时间', '工作经历'), FieldType.START_DATE);
+});
 
 test('共享 start_end_time 名称不能盖过明确的日期端点标签', () => {
   const identify = (label: string, context: string) => FieldMatcher.matchFieldType(

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "scope": "local-controlled-fixtures",
+  "passed": 0,
+  "failed": 1,
+  "checks": [
+    {
+      "name": "ATSX 已选标签可读回且保留原值",
+      "status": "failed",
+      "elapsedMs": 147,
+      "reason": "{\"status\":\"unsupported\",\"reason\":\"该控件需要专用适配或人工填写\",\"expectedValue\":\"北京\",\"observedValue\":\"\",\"attempts\":0,\"fieldId\":\"control-1\",\"adapterId\":\"dom-unsupported\"}\n+ actual - expected\n\n+ 'unsupported'\n- 'skipped-existing'\n"
+    }
+  ]
+}

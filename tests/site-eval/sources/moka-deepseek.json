@@ -1,0 +1,36 @@
+{
+  "capturedAt": "2026-09-30",
+  "captureMethod": "read-only-browser-dom",
+  "url": "https://app.mokahr.com/apply/high-flyer/140576#/job/a63f2346-b672-4c48-af43-0a64bfe97a41/apply?pure=1",
+  "states": [
+    "initial",
+    "education-options-open"
+  ],
+  "fieldLabels": [
+    "意向工作城市",
+    "上传简历",
+    "上传照片",
+    "姓名",
+    "手机号码",
+    "邮箱",
+    "最高学历",
+    "开始工作年月",
+    "个人邮箱",
+    "招聘渠道",
+    "确认声明"
+  ],
+  "educationOptions": [
+    "本科",
+    "硕士",
+    "博士",
+    "高中",
+    "大专",
+    "中专",
+    "初中及以下",
+    "MBA",
+    "其他"
+  ],
+  "inputClass": "sd-Input-input-10L0t sd-Input-common-input-1XimE",
+  "selectClass": "sd-Select-container-1Eq4x",
+  "limitations": "字段描述采集；尚未加载实际扩展扫描该线上页面，无完整页面回放，无申请提交。"
+}

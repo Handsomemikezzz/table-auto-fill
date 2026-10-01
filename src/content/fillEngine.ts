@@ -1,15 +1,18 @@
+import { activateControl as activate, isAutomatedControlAction } from './controlActivation.ts';
+export { isAutomatedControlAction } from './controlActivation.ts';
 import type { FillOutcome, FillStatus } from '../shared/fillModel.ts';
 import { resolveOption, normalizeOptionLabel } from '../utils/optionResolver.ts';
 import { adaptDateValue, parseFlexibleDate, areEquivalentDates } from '../utils/dateValue.ts';
 import { dateRangePart } from './fieldBinding.ts';
 import { fillDatePicker, supportsDatePicker, verifyDatePicker } from './datePickerAdapter.ts';
 import { fillCascader, supportsCascader, verifyCascader } from './cascaderAdapter.ts';
+import { fillUdTreeSelect, supportsUdTreeSelect, verifyUdTreeSelect } from './udTreeSelectAdapter.ts';
 import {
   getAssociatedPopups, getControlIdentity, getControlKind, getControlValue,
   getEditableElement, getOptions, isNativeInput, isNativeSelect,
   isNativeTextArea, isOptionSelected, isVisibleControl, observeControl,
   type ControlObservation, type ObservedOption,
-  bindAssociatedPopup, KNOWN_COMBOBOX_SELECTOR, KNOWN_POPUP_SELECTOR,
+  bindAssociatedPopup, associateNearbyPopup, isMultipleControl, KNOWN_COMBOBOX_SELECTOR, KNOWN_POPUP_SELECTOR,
 } from './controlObservation.ts';
 
 export interface FillContext {
@@ -43,10 +46,6 @@ interface AttemptState {
 }
 
 const pause = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
-// Native .click() can synchronously dispatch trusted input/change events. They
-// belong to this action; asynchronous user events remain observable as usual.
-const activeActions = new WeakSet<Document>();
-export function isAutomatedControlAction(document: Document): boolean { return activeActions.has(document); }
 function outcome(state: AttemptState, status: FillStatus, reason: string, expectedValue: string): FillOutcome {
   return {
     status, reason, expectedValue, observedValue: getControlValue(state.element),
@@ -66,7 +65,7 @@ function beginAttempt(element: HTMLElement, context: FillContext): AttemptState 
     element, context, startedAt, deadline: startedAt + (context.timeoutMs ?? 10000), attempts: 0, userEdited: false, stop: () => {},
   };
   const onUserEvent = (event: Event) => {
-    if (!event.isTrusted || activeActions.has(element.ownerDocument) || !(event.target instanceof Node)) return;
+    if (!event.isTrusted || isAutomatedControlAction(element.ownerDocument) || !(event.target instanceof Node)) return;
     const target = event.target;
     const observation = observeControl(element);
     const wrapper = element.parentElement?.closest('.ant-select, .el-select, .MuiAutocomplete-root, .react-select__control, .semi-select, .arco-select, .ud__select');
@@ -90,13 +89,6 @@ function booleanValue(value: string): boolean | undefined {
   if (/^(true|yes|是|同意|接受|已勾选)$/i.test(value.trim())) return true;
   if (/^(false|no|否|不同意|不接受|未勾选)$/i.test(value.trim())) return false;
   return undefined;
-}
-function isMultipleControl(element: HTMLElement): boolean {
-  return getControlKind(element) === 'checkbox' || (isNativeSelect(element) && element.multiple)
-    || element.getAttribute('aria-multiselectable') === 'true'
-    || getAssociatedPopups(element).some(popup => popup.getAttribute('aria-multiselectable') === 'true')
-    || Boolean(element.closest('.ant-select-multiple, .el-select--multiple, .semi-select-multiple, .arco-select-view-multiple, [data-multiple="true"]'))
-    || Boolean(element.querySelector('.MuiAutocomplete-tag, .react-select__multi-value__label'));
 }
 function expectedControl(observation: ControlObservation, value: string, context: FillContext): ExpectedControl | FillOutcome {
   const { element, kind, options } = observation;
@@ -231,21 +223,6 @@ function writeText(element: HTMLElement, value: string): void {
   } else element.textContent = value;
   dispatchInput(element);
 }
-function activate(element: HTMLElement, pointerStrategy = false): void {
-  activeActions.add(element.ownerDocument);
-  try {
-    element.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
-    if (pointerStrategy) {
-      const view = element.ownerDocument.defaultView!;
-      element.dispatchEvent(new view.PointerEvent('pointerdown', { bubbles: true, cancelable: true, composed: true }));
-      element.dispatchEvent(new view.MouseEvent('mousedown', { bubbles: true, cancelable: true, composed: true }));
-      element.dispatchEvent(new view.PointerEvent('pointerup', { bubbles: true, cancelable: true, composed: true }));
-      element.dispatchEvent(new view.MouseEvent('mouseup', { bubbles: true, cancelable: true, composed: true }));
-    }
-    element.click();
-  } finally { activeActions.delete(element.ownerDocument); }
-}
-
 async function waitForObservation(state: AttemptState, predicate: () => boolean, duration: number): Promise<boolean> {
   const end = Math.min(state.deadline, Date.now() + duration);
   do {
@@ -261,6 +238,7 @@ async function resolveCombobox(state: AttemptState, value: string): Promise<Expe
   let observation = observeControl(element);
   let expected = expectedControl(observation, value, context);
   const visiblePopup = () => getAssociatedPopups(element).some(isVisibleControl);
+  associateNearbyPopup(element);
   if (!visiblePopup()) {
     const root = element.getRootNode() as Document | ShadowRoot;
     const before = new Set(Array.from(root.querySelectorAll<HTMLElement>(KNOWN_POPUP_SELECTOR)).filter(isVisibleControl));
@@ -270,7 +248,7 @@ async function resolveCombobox(state: AttemptState, value: string): Promise<Expe
     activate(trigger, Boolean(element.closest('.ant-select')));
     state.openedPopup = true;
     await waitForObservation(state, () => {
-      if (visiblePopup()) return true;
+      if (visiblePopup() || associateNearbyPopup(element)) return true;
       if (!element.closest(KNOWN_COMBOBOX_SELECTOR)) return false;
       const anchor = element.closest(KNOWN_COMBOBOX_SELECTOR) || element;
       const anchorRect = anchor.getBoundingClientRect();
@@ -395,6 +373,7 @@ export async function fillControl(element: HTMLElement, value: string, context: 
     if (stopped) return stopped;
     if (!value.trim()) return outcome(state, 'needs-data', '没有可填写的答案', value);
     if (supportsDatePicker(element)) return await fillDatePicker(element, value, context);
+    if (supportsUdTreeSelect(element)) return await fillUdTreeSelect(element, value, context);
     if (supportsCascader(element)) return await fillCascader(element, value, context);
     const observation = observeControl(element);
     if (observation.disabled) return outcome(state, 'unsupported', '控件当前不可操作，可能需要先完成关联字段', value);
@@ -409,7 +388,10 @@ export async function fillControl(element: HTMLElement, value: string, context: 
       return verified.status === 'verified' ? { ...verified, status: 'unchanged', reason: '现有值已符合目标值' } : verified;
     }
     if (observation.value.trim() && !context.overwrite) return outcome(state, 'skipped-existing', '已保留网页中的现有答案', value);
-    if (observation.kind === 'combobox') expected = await resolveCombobox(state, value);
+    if (observation.kind === 'combobox') {
+      expected = await resolveCombobox(state, value);
+      if (supportsUdTreeSelect(element)) return await fillUdTreeSelect(element, value, { ...context, shouldContinue: () => !interrupted(state, value) });
+    }
     if (isOutcome(expected)) return { ...outcome(state, expected.status, expected.reason, value), ...expected };
     const beforeApply = interrupted(state, value);
     if (beforeApply) return beforeApply;
@@ -453,6 +435,7 @@ export async function verifyControl(element: HTMLElement, value: string, context
     const stopped = interrupted(state, value);
     if (stopped) return stopped;
     if (supportsDatePicker(element)) return await verifyDatePicker(element, value, context);
+    if (supportsUdTreeSelect(element)) return await verifyUdTreeSelect(element, value, context);
     if (supportsCascader(element)) return await verifyCascader(element, value, context);
     const observation = observeControl(element);
     const expected = expectedControl(observation, value, context);

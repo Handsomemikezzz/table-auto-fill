@@ -67,6 +67,7 @@ let page;
 let background;
 let passed = 0;
 const failed = [];
+const checkResults = [];
 
 const profile = {
   personal: { name: '测试用户', gender: '男', birthDate: '2000-06', phone: '', email: '', currentAddress: '' },
@@ -79,9 +80,11 @@ const profile = {
 
 async function check(name, action) {
   if (process.env.JOB_APPLYMATE_TEST_FILTER && !name.includes(process.env.JOB_APPLYMATE_TEST_FILTER)) return;
-  try { await action(); passed++; console.log(`✓ ${name}`); }
+  const started = performance.now();
+  try { await action(); passed++; checkResults.push({ name, status: 'passed', elapsedMs: Math.round(performance.now() - started) }); console.log(`✓ ${name}`); }
   catch (error) {
     failed.push({ name, message: error.message });
+    checkResults.push({ name, status: 'failed', elapsedMs: Math.round(performance.now() - started), reason: error.message });
     console.error(`✗ ${name}\n  ${error.message}`);
     if (/超时/.test(error.message)) {
       console.error(JSON.stringify(page?.events.filter(event => ['Runtime.exceptionThrown', 'Page.javascriptDialogOpening'].includes(event.method)).slice(-4)));
@@ -144,6 +147,17 @@ async function prepareExtension(scenario) {
 async function makeNameUnknown() {
   await page.evaluate(`(() => { const input = document.querySelector('#name'); input.id = 'answer'; input.name = 'answer'; const label = document.querySelector('label[for="name"]'); label.htmlFor = 'answer'; label.textContent = '怎么称呼你'; })()`);
 }
+async function readSession(url = fixtureUrl) {
+  const response = await background.evaluate(`(async () => {
+    const tab = (await chrome.tabs.query({ url: ${JSON.stringify(url + '*')} }))[0];
+    return chrome.tabs.sendMessage(tab.id, { type: 'GET_FILL_SESSION_RESULT' }, { frameId: 0 });
+  })()`);
+  assert.equal(response.success, true, JSON.stringify(response));
+  return response.data.starting ? null : response.data.result;
+}
+async function waitForSession(url = fixtureUrl) {
+  return waitFor(async () => { const result = await readSession(url); return result?.settled && result; }, '填写会话结束', 30000);
+}
 async function extensionFill(scenario) {
   modelRequests = []; modelMode = 'normal'; modelDelay = 0;
   await prepareExtension(scenario);
@@ -154,10 +168,9 @@ async function extensionFill(scenario) {
     return { ...response, testDetection: detection };
   })()`, 60_000);
   assert.equal(response.success, true, JSON.stringify(response));
-  await waitFor(() => page.evaluate("Boolean(document.querySelector('[data-job-applymate-task]')?.shadowRoot?.textContent.includes('已填写'))"), '模型填写任务完成', 30000);
+  const result = await waitForSession();
   const panel = await page.evaluate("document.querySelector('[data-job-applymate-task]').shadowRoot.textContent");
-  const counts = panel.match(/已填写 (\d+) 项，(\d+) 项需处理/);
-  response.data = { verifiedCount: Number(counts?.[1] || 0), failures: Number(counts?.[2]) ? Array(Number(counts[2])).fill({}) : [], panel };
+  response.data = { verifiedCount: result.counts.verified, failures: result.fields.filter(field => field.status === 'todo' || field.status === 'pending'), panel, result };
   return { response, snapshot: await page.evaluate('window.formFixture.snapshot()') };
 }
 
@@ -173,6 +186,49 @@ try {
   const workerTarget = await waitFor(async () => (await browser.targets()).find(target => target.type === 'service_worker' && target.url.endsWith('/background.js')), '实际扩展后台启动');
   background = await connectCdp(workerTarget.webSocketDebuggerUrl);
 
+  await check('UD 普通单选保留正常行为', () => runEngine('ud-flat', '#ud-control', '男', 'verified', 'gender', 'm', { semantic: 'gender' }));
+  await check('UD 预先展开的弹层仍能确定归属', () => runEngine('ud-preopen', '#ud-control', '男', 'verified', 'gender', 'm', { semantic: 'gender' }));
+  await check('UD 模糊弹层归属不会操作另一个控件', () => runEngine('ud-foreign-popup', '#ud-control', '男', 'failure', 'foreign', '', { semantic: 'gender', timeoutMs: 1600 }));
+  await check('UD 隐藏后复用同一弹层仍能完成第二次选择', async () => {
+    await runEngine('ud-flat', '#ud-control', '男', 'verified', 'gender', 'm', { semantic: 'gender' });
+    const result = await page.evaluate("window.formFixture.fill('#ud-control', '女', { semantic: 'gender', overwrite: true })");
+    assert.equal(result.status, 'verified', JSON.stringify(result));
+    assert.equal((await page.evaluate('window.formFixture.snapshot()')).state.gender, 'f');
+  });
+  await check('UD TreeSelect 取消后不选择叶子', async () => {
+    await render('ud-tree-preopen');
+    const result = await page.evaluate("window.formFixture.fill('#ud-control', '上海', { shouldContinue: () => false })");
+    assert.equal(result.status, 'cancelled');
+    assert.equal((await page.evaluate('window.formFixture.snapshot()')).state.region, '');
+  });
+  await check('UD 多选提交两个真实答案', () => runEngine('ud-multiple', '#ud-control', '上海、北京', 'verified', 'region', '上海、北京'));
+  await check('UD TreeSelect 展开父级并选择叶子', () => runEngine('ud-tree', '#ud-control', '上海', 'verified', 'region', '上海'));
+  await check('UD TreeSelect 多选叶子且保持真实选择状态', () => runEngine('ud-tree-multiple', '#ud-control', '上海、北京', 'verified', 'region', '上海、北京'));
+  await check('UD TreeSelect 完整路径只选择其父级下的叶子', () => runEngine('ud-tree', '#ud-control', '华东地区 / 上海', 'verified', 'region', '上海'));
+  await check('UD TreeSelect 错误父路径不能仅凭同名叶子填写', () => runEngine('ud-tree', '#ud-control', '其他地区 / 上海', 'failure', 'region', '', { timeoutMs: 2200 }));
+  await check('UD TreeSelect 父节点不能代替叶子选择', () => runEngine('ud-tree', '#ud-control', '华东地区', 'failure', 'region', '', { timeoutMs: 1800 }));
+  await check('UD 弹层内部复选节点不成为新表单字段', async () => {
+    await render('ud-tree-scan');
+    const observations = await page.evaluate('window.formFixture.observe()');
+    assert.equal(observations.length, 1, JSON.stringify(observations));
+  });
+  await check('ATSX 已选标签可读回且保留原值', async () => {
+    await runEngine('atsx-selected', '#ud-control', '北京', 'skipped-existing', 'region', '上海');
+    assert.equal(await page.evaluate("window.formFixture.readValue('#ud-control')"), '上海');
+  });
+  await check('留出 AvePoint 原生结构：身份填写、原值保护与不明确单选交接', async () => {
+    await render('avepoint-native');
+    for (const [name, value] of [['name', '合成候选人'], ['tel', '13800000000'], ['email', 'candidate@example.com']]) {
+      const result = await page.evaluate(`window.formFixture.fill('[name="${name}"]', ${JSON.stringify(value)})`);
+      assert.equal(result.status, 'verified', JSON.stringify(result));
+      assert.equal((await page.evaluate('window.formFixture.snapshot()')).state[name], value);
+    }
+    const result = await page.evaluate("window.formFixture.fill('input[name=gender]', '男', { semantic: 'gender' })");
+    assert(!['verified', 'unchanged'].includes(result.status), '缺少选项标签关系必须交给人工');
+    assert.equal((await page.evaluate('window.formFixture.snapshot()')).state.gender || '', '');
+    assert.equal(await page.evaluate("document.querySelector('[name=job]').value"), '网络安全工程师--IT方向');
+  });
+  await check('Moka 未读取的下拉不能通过写搜索框虚报选择成功', () => runEngine('moka-unread', '#moka-control', '本科', 'failure', 'degree', '', { timeoutMs: 1600 }));
   await check('React 受控文本：DOM 写入同步到组件状态', () => runEngine('react-text', '#name', '测试用户', 'verified', 'name', '测试用户'));
   await check('原生下拉：男对应 0', () => runEngine('select-zero', '#gender', '男', 'verified', 'gender', '0', { semantic: 'gender' }));
   await check('原生下拉：男对应 1，映射反转仍正确', () => runEngine('select-one', '#gender', '男', 'verified', 'gender', '1', { semantic: 'gender' }));
@@ -294,7 +350,7 @@ try {
   await check('模型返回不存在的事实时不填写', async () => {
     await prepareExtension('react-text'); await makeNameUnknown(); modelMode = 'invented';
     await background.evaluate(`(async () => { const tab = (await chrome.tabs.query({ url: ${JSON.stringify(fixtureUrl + '*')} }))[0]; return chrome.tabs.sendMessage(tab.id, { type: 'START_FILL_SESSION', payload: { sourceId: 'default' } }, { frameId: 0 }); })()`);
-    await waitFor(() => page.evaluate("document.querySelector('[data-job-applymate-task]')?.shadowRoot?.textContent.includes('已填写 0 项，1 项需处理')"), '虚构事实被阻止');
+    await waitForSession();
     assert.equal((await page.evaluate('window.formFixture.snapshot()')).state.name || '', '');
     modelMode = 'normal';
   });
@@ -302,7 +358,7 @@ try {
     await prepareExtension('react-text');
     await background.evaluate("chrome.storage.local.remove('llmConfig')");
     await background.evaluate(`(async () => { const tab = (await chrome.tabs.query({ url: ${JSON.stringify(fixtureUrl + '*')} }))[0]; return chrome.tabs.sendMessage(tab.id, { type: 'FILL_FORM' }, { frameId: 0 }); })()`);
-    await waitFor(() => page.evaluate("document.querySelector('[data-job-applymate-task]')?.shadowRoot?.textContent.includes('已填写 1 项')"), '无模型的本地填写');
+    await waitForSession();
     assert.equal((await page.evaluate('window.formFixture.snapshot()')).state.name, '测试用户');
   });
   await check('停止本地填写后不再填写后续字段或上传附件', async () => {
@@ -318,7 +374,7 @@ try {
   await check('所选附件独立上传，仍使用通用资料', async () => {
     await prepareExtension('ai-cancel'); modelRequests = [];
     await background.evaluate(`(async () => { const tab = (await chrome.tabs.query({ url: ${JSON.stringify(fixtureUrl + '*')} }))[0]; return chrome.tabs.sendMessage(tab.id, { type: 'START_FILL_SESSION', payload: { sourceId: 'default', attachmentId: 'legacy-resume' } }, { frameId: 0 }); })()`);
-    await waitFor(() => page.evaluate("document.querySelector('[data-job-applymate-task]')?.shadowRoot?.textContent.includes('已填写')"), '含附件填写完成', 30000);
+    await waitForSession();
     assert.equal(await page.evaluate("document.querySelector('#resume').files[0]?.name"), 'cancel.pdf');
     assert.equal((await page.evaluate('window.formFixture.snapshot()')).state.name, '测试用户');
     assert.equal(modelRequests.length, 0);
@@ -328,7 +384,7 @@ try {
     await page.evaluate(`(() => { const frame = document.createElement('iframe'); frame.src = ${JSON.stringify(fixtureUrl + '?scenario=react-text')}; document.body.append(frame); })()`);
     await waitFor(() => page.evaluate("Boolean(document.querySelector('iframe').contentWindow.formFixture)"), '子框架加载');
     await background.evaluate(`(async () => { const tab = (await chrome.tabs.query({ url: ${JSON.stringify(fixtureUrl + '*')} }))[0]; return chrome.tabs.sendMessage(tab.id, { type: 'START_FILL_SESSION', payload: { sourceId: 'default' } }, { frameId: 0 }); })()`);
-    await waitFor(() => page.evaluate("document.querySelector('[data-job-applymate-task]')?.shadowRoot?.textContent.includes('已填写 2 项')"), '跨框架填写', 30000);
+    await waitForSession();
     assert.equal(await page.evaluate("document.querySelector('iframe').contentDocument.querySelectorAll('[data-job-applymate-task]').length"), 0);
     assert.equal(await page.evaluate("document.querySelector('iframe').contentWindow.formFixture.snapshot().state.name"), '测试用户');
   });
@@ -337,7 +393,7 @@ try {
       const { response, snapshot } = await extensionFill(scenario);
       assert.equal(snapshot.state[key], expected);
       assert.equal(response.data.verifiedCount, 0);
-      assert.match(response.data.panel, /保留原值 1/);
+      assert.equal(response.data.result.counts.existing, 1);
     });
   }
   await check('模型等待期间的用户编辑保持原样', async () => {
@@ -346,9 +402,9 @@ try {
     await waitFor(() => modelRequests.length > 0, '模型请求开始');
     await page.evaluate("document.querySelector('#answer').focus()");
     await page.send('Input.insertText', { text: '用户决定保留的姓名' });
-    await waitFor(() => page.evaluate("document.querySelector('[data-job-applymate-task]')?.shadowRoot?.textContent.includes('已填写')"), '保留用户编辑');
+    await waitForSession();
     assert.equal((await page.evaluate('window.formFixture.snapshot()')).state.name, '用户决定保留的姓名');
-    assert.match(await page.evaluate("document.querySelector('[data-job-applymate-task]').shadowRoot.textContent"), /已填写 0 项/);
+    assert.equal((await readSession()).counts.verified, 0);
     modelDelay = 0;
     const screenshot = await page.send('Page.captureScreenshot', { format: 'png' });
     writeFileSync('/tmp/job-applymate-task-panel.png', Buffer.from(screenshot.data, 'base64'));
@@ -363,7 +419,7 @@ try {
       }
     })()`);
     await background.evaluate(`(async () => { const tab = (await chrome.tabs.query({ url: ${JSON.stringify(fixtureUrl + '*')} }))[0]; return chrome.tabs.sendMessage(tab.id, { type: 'START_FILL_SESSION', payload: { sourceId: 'default' } }, { frameId: 0 }); })()`);
-    await waitFor(() => page.evaluate("document.querySelector('[data-job-applymate-task]')?.shadowRoot?.textContent.includes('已填写 2 项，1 项需处理')"), '失败模块后的其他模块完成', 30000);
+    await waitForSession();
     assert.equal(await page.evaluate("document.querySelector('#name').value"), '测试用户');
     assert.equal(await page.evaluate("document.querySelector('#a').value"), '');
     assert.equal(await page.evaluate("document.querySelector('#b').value"), '测试用户');
@@ -375,19 +431,20 @@ try {
     await prepareExtension('personal-extra'); modelRequests = []; modelMode = 'normal';
     const start = async (url = fixtureUrl) => background.evaluate(`(async () => { const tab = (await chrome.tabs.query({ url: ${JSON.stringify(url + '*')} }))[0]; return chrome.tabs.sendMessage(tab.id, { type: 'START_FILL_SESSION', payload: { sourceId: 'default' } }, { frameId: 0 }); })()`);
     await start();
-    await waitFor(() => page.evaluate("document.querySelector('[data-job-applymate-task]')?.shadowRoot?.textContent.includes('已填写 1 项，0 项需处理')"), '缺资料留空', 30000);
+    await waitForSession();
     assert.equal(await page.evaluate("document.querySelector('#age').value"), '');
     assert.equal(await page.evaluate("document.querySelector('#preferredCities').value"), '');
     assert.equal(modelRequests.length, 1, '已知且缺失的个人字段不应请求模型，只有未知推荐方式需要匹配');
     const panelText = await page.evaluate("document.querySelector('[data-job-applymate-task]').shadowRoot.textContent");
-    assert.match(panelText, /无资料留空 5/);
+    assert.equal((await readSession()).counts.missing, 5);
     assert.doesNotMatch(panelText, /本网站|registry/);
-    await page.evaluate("Array.from(document.querySelector('[data-job-applymate-task]').shadowRoot.querySelectorAll('button')).find(button => button.textContent === '补充个人资料（可选）').click()");
+
     const saveFromPanel = async (label, value, stateKey) => {
-      await page.evaluate(`(() => { const root = document.querySelector('[data-job-applymate-task]').shadowRoot; const select = root.querySelector('[aria-label="待处理队列"]'); select.value = Array.from(select.options).find(option => option.textContent.includes(${JSON.stringify(" · " + label)})).value; select.dispatchEvent(new Event('change')); })()`);
-      await page.evaluate(`(() => { const root = document.querySelector('[data-job-applymate-task]').shadowRoot; const answer = root.querySelector('[aria-label="补充个人资料"]'); answer.value = ${JSON.stringify(value)}; answer.dispatchEvent(new Event('input')); Array.from(root.querySelectorAll('button')).find(button => button.textContent === '保存并填写').click(); })()`);
+      await page.evaluate(`(() => { const root = document.querySelector('[data-job-applymate-task]').shadowRoot; Array.from(root.querySelectorAll('button')).find(button => button.textContent === '展开')?.click(); const target = root.querySelector('[aria-label^=' + ${JSON.stringify(JSON.stringify('补充' + label))} + ']'); if (!target) throw new Error('missing supplement ' + ${JSON.stringify(label)} + ': ' + root.textContent); target.click(); })()`);
+      await page.evaluate(`(() => { const root = document.querySelector('[data-job-applymate-task]').shadowRoot; const answer = root.querySelector('[aria-label="补充个人资料"]'); answer.value = ${JSON.stringify(value)}; answer.dispatchEvent(new Event(answer.tagName === 'SELECT' ? 'change' : 'input')); Array.from(root.querySelectorAll('button')).find(button => button.textContent === '保存并填入').click(); })()`);
       await waitFor(() => page.evaluate(`window.formFixture.snapshot().state[${JSON.stringify(stateKey)}] === ${JSON.stringify(value)}`), '保存并填写 ' + label).catch(async error => { console.error(JSON.stringify(await page.evaluate("({ panel: document.querySelector('[data-job-applymate-task]').shadowRoot.textContent, state: window.formFixture.snapshot(), radios: Array.from(document.querySelectorAll('input[type=radio]')).map(input => ({ id: input.id, checked: input.checked, value: input.value })) })"))); console.error(JSON.stringify(await background.evaluate("chrome.storage.local.get('userProfile')"))); throw error; });
-      await waitFor(() => page.evaluate("!Array.from(document.querySelector('[data-job-applymate-task]').shadowRoot.querySelectorAll('button')).find(button => button.textContent === '停止')"), '手动填写完成');
+      await waitForSession();
+      await page.evaluate("Array.from(document.querySelector('[data-job-applymate-task]').shadowRoot.querySelectorAll('button')).find(button => button.textContent === '← 返回列表').click()");
     };
     await saveFromPanel('年龄', '26', 'age');
     await saveFromPanel('作品集链接', 'https://portfolio.example/me', 'portfolioUrl');
@@ -403,12 +460,12 @@ try {
     await waitFor(() => page.evaluate('Boolean(window.formFixture)'), '第二个网站加载');
     await waitFor(() => background.evaluate(`(async () => { const tab = (await chrome.tabs.query({ url: ${JSON.stringify(secondOrigin + '*')} }))[0]; return tab?.id && (await chrome.tabs.sendMessage(tab.id, { type: 'PING_CONTENT' }, { frameId: 0 }))?.success; })()`), '第二个网站连接');
     modelRequests = []; await start(secondOrigin);
-    await waitFor(() => page.evaluate("document.querySelector('[data-job-applymate-task]')?.shadowRoot?.textContent.includes('已填写 4 项，0 项需处理')"), '跨网站自动复用', 30000);
+    await waitForSession(secondOrigin);
     assert.equal(modelRequests.length, 0);
     assert.equal(await page.evaluate("document.querySelector('#age').value"), '26');
     assert.equal(await page.evaluate("window.formFixture.snapshot().state.referral"), '内推');
     assert.equal(await page.evaluate("document.querySelector('#languageSkills').value"), '');
-    await page.evaluate("Array.from(document.querySelector('[data-job-applymate-task]').shadowRoot.querySelectorAll('button')).find(button => button.textContent === '补充个人资料（可选）').click()");
+
     const screenshot = await page.send('Page.captureScreenshot', { format: 'png' });
     writeFileSync('/tmp/job-applymate-personal-supplement.png', Buffer.from(screenshot.data, 'base64'));
     // Two pages can add different global fields concurrently without overwriting each other.
@@ -429,6 +486,7 @@ try {
   if (browser) console.error(browser.diagnostics());
   process.exitCode = 1;
 } finally {
+  if (process.env.JOB_APPLYMATE_REPORT_PATH) writeFileSync(process.env.JOB_APPLYMATE_REPORT_PATH, JSON.stringify({ schemaVersion: 1, scope: 'local-controlled-fixtures', passed, failed: failed.length, checks: checkResults }, null, 2) + '\n');
   background?.close();
   page?.close();
   if (browser) await browser.close();

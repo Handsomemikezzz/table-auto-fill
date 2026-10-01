@@ -9,6 +9,7 @@ import { validateDecision, validateModule } from './decisionValidation.ts';
 import { buildRuleDecisions, profileForRuleBinding } from './ruleDecisions.ts';
 import { FillSessionController } from './fillSessionController.ts';
 import { LLMDecisionProvider } from './decisionProvider.ts';
+import { prepareDecisionContext } from './decisionContext.ts';
 import { createProfileImportDraft, applyProfileImportDraft } from './profileImport.ts';
 import { normalizeUserProfile } from '../shared/storage.ts';
 import type { UserProfile } from '../shared/types.ts';
@@ -94,6 +95,36 @@ function harness(fields: FieldObservation[] = [field()]) {
   const controller = new FillSessionController(context, ports);
   return { controller, ports, calls, writes, observe: (fields: FieldObservation[]) => { observations = fields; } };
 }
+test('session results distinguish automatic, assisted and preserved fields without exposing values', async () => {
+  const h = harness([field('auto'), field('existing', { currentValue: 'private existing answer' }), field('manual')]);
+  h.ports.decide = async fields => fields.map(target => decision(target, 'personal.name', undefined,
+    target.fieldId === 'manual' ? { nextAction: 'manual' } : {}));
+  assert.equal(h.controller.result.settled, false);
+  await h.controller.run();
+  assert.equal(h.controller.result.settled, true);
+  assert.equal(h.controller.result.counts.verified, 1);
+  assert.equal(h.controller.result.counts.existing, 1);
+  await h.controller.manual(h.controller.items.find(item => item.observation.fieldId === 'manual')!, 'private manual answer');
+  assert.equal(h.controller.result.counts.assisted, 1);
+  assert.equal(h.controller.result.counts.verified, 1);
+  assert.doesNotMatch(JSON.stringify(h.controller.result), /private|小王|00138|expectedValue|observedValue/);
+});
+test('stopped model requests are not settled until the pending operation returns', async () => {
+  const h = harness();
+  let release!: (value: FieldDecision[]) => void;
+  let markStarted!: () => void;
+  const started = new Promise<void>(resolve => { markStarted = resolve; });
+  h.ports.decide = () => new Promise(resolve => { release = resolve; markStarted(); });
+  const running = h.controller.run();
+  await started;
+  h.controller.stop();
+  assert.equal(h.controller.result.phase, 'stopped');
+  assert.equal(h.controller.result.settled, false);
+  release([decision()]); await running;
+  assert.equal(h.controller.result.settled, true);
+  assert.equal(h.controller.result.modelRequests, 1);
+  assert.equal(h.controller.result.counts.verified, 0);
+});
 test('fields without a confident rule still reach the model', async () => {
   const h = harness([field('known'), field('unknown', { candidates: ['unknown'] })]);
   await h.controller.run(); assert.deepEqual(h.calls, [['known', 'unknown']]); assert.equal(h.writes.length, 2); assert.equal(h.controller.counts.verified, 2);
@@ -185,7 +216,7 @@ test('expired additional facts request confirmation instead of being used silent
 test('an unknown date endpoint prevents its partner from being counted as complete', async () => {
   const fields = [field('start', { dateGroupId: 'range' }), field('end', { dateGroupId: 'range' })]; const h = harness(fields);
   h.ports.decide = async fields => fields.map(target => target.fieldId === 'start' ? decision(target, 'education.startDate', 'edu1') : decision(target, 'personal.name', undefined, { nextAction: 'requestMeaning', meaningId: undefined, factId: undefined }));
-  await h.controller.run(); assert.equal(h.controller.counts.verified, 0); assert.equal(h.controller.counts.todo, 1); assert.equal(h.controller.counts.missing, 1);
+  await h.controller.run(); assert.equal(h.controller.counts.verified, 0); assert.equal(h.controller.counts.todo, 2); assert.equal(h.controller.counts.missing, 0);
 });
 test('preserved conflicting upstream values do not satisfy a planned dependency', async () => {
   const h = harness([field('upstream'), field('child')]);
@@ -231,8 +262,84 @@ test('failed rule operation reaches model and a different option plan can recove
     h.writes.push(field.fieldId + ':' + plan.nextAction);
     return plan.modelId === 'local-rules-v1' ? { status: 'needs-mapping', reason: '请确认网站选项' } as any : { status: 'verified', reason: value };
   };
-  h.ports.decide = async fields => { h.calls.push(fields.map(field => field.fieldId)); return fields.map(field => decision(field, 'personal.name', undefined, { nextAction: 'select', targetOptionIds: ['option-name'] })); };
+  h.ports.decide = async fields => { assert.equal(fields[0].resolvedBinding?.factId, snapshot.facts[0].id); h.calls.push(fields.map(field => field.fieldId)); return fields.map(field => decision(field, 'personal.name', undefined, { nextAction: 'select', targetOptionIds: ['option-name'] })); };
   await h.controller.run(); assert.deepEqual(h.calls, [['choice']]); assert.deepEqual(h.writes, ['choice:write', 'choice:select']); assert.equal(h.controller.counts.verified, 1);
+});
+test('unsupported rule execution hands off without reinterpreting a known answer', async () => {
+  const h = harness([field('school', { ruleBinding: { meaningId: 'personal.name', confidence: 1 } })]);
+  h.ports.execute = async () => ({ status: 'unsupported', reason: '请在网页中选择' } as any);
+  await h.controller.run();
+  assert.equal(h.controller.counts.todo, 1); assert.equal(h.controller.modelRequests, 0);
+  assert.equal(h.controller.items[0].decision?.meaningId, 'personal.name');
+});
+test('known date precision failures do not ask the model to invent a more precise answer', async () => {
+  const h = harness([field('birthday', { kind: 'date', ruleBinding: { meaningId: 'personal.birthDate', confidence: 1 } })]);
+  const dated = createProfileSnapshot({ ...profile, personal: { ...profile.personal, birthDate: '2000-06' } });
+  const controller = new FillSessionController({ ...context, profile: dated }, h.ports);
+  h.ports.execute = async () => ({ status: 'needs-mapping', reason: '网站要求具体日期，但资料精度不足' } as any);
+  await controller.run(); assert.equal(controller.counts.todo, 1); assert.equal(controller.modelRequests, 0);
+});
+test('unchanged option reads require only one model call', async () => {
+  const h = harness([field('choice', { kind: 'combobox' })]);
+  h.ports.decide = async fields => { h.calls.push(['choice']); return fields.map(target => decision(target, 'personal.name', undefined, { nextAction: 'readOptions' })); };
+  await h.controller.run(); assert.equal(h.calls.length, 1);
+});
+test('resolved option matching cannot switch facts or records', () => {
+  const target = field('school', { kind: 'select', options: [{ id: 'school-option', label: '安徽大学' }],
+    resolvedBinding: { meaningId: 'education.school', subject: 'self', recordId: 'edu1', factId: snapshot.facts.find(fact => fact.meaningId === 'education.school' && fact.recordId === 'edu1')!.id } });
+  assert(validateDecision(decision(target, 'education.school', 'edu2', { nextAction: 'select', targetOptionIds: ['school-option'] }), target, request([target])).error);
+});
+test('option-only context keeps its fact; generic modules keep all facts and education keeps complete records', () => {
+  const full = request([field('school', { groupLabel: '教育经历', candidates: ['education.school', 'unknown'] })]);
+  full.profile = { ...snapshot, facts: [...snapshot.facts, { id: 'unrelated', meaningId: 'projects.name', subject: 'self', recordId: 'project1', value: 'unrelated project', source: 'test' }] };
+  const reduced = prepareDecisionContext(full);
+  assert.equal(reduced.registry, full.registry);
+  assert.equal(reduced.profile.version, full.profile.version);
+  assert.equal(reduced.profile.facts.filter(fact => fact.meaningId.startsWith('education.')).length, snapshot.facts.filter(fact => fact.meaningId.startsWith('education.')).length);
+  assert(!reduced.profile.facts.some(fact => fact.id === 'unrelated'));
+  const generic = { ...full, fields: [field()] };
+  assert.equal(prepareDecisionContext(generic), generic);
+  const bound = { ...field(), resolvedBinding: { meaningId: 'personal.name', subject: 'self', factId: snapshot.facts[0].id } };
+  assert.deepEqual(prepareDecisionContext({ ...full, fields: [bound] }).profile.facts.map(fact => fact.id), [snapshot.facts[0].id]);
+});
+test('unknown meanings without AI stay manual rather than falsely reporting absent personal data', async () => {
+  const h = harness(); h.controller.context.modelAvailable = false;
+  try { await h.controller.run(); assert.equal(h.controller.counts.todo, 1); assert.equal(h.controller.counts.missing, 0); }
+  finally { delete h.controller.context.modelAvailable; }
+});
+test('explicit meaning correction clears a retained binding before deciding again', async () => {
+  const target = field('name', { origin: 'https://test.example', ruleBinding: { meaningId: 'personal.name', confidence: 1 } });
+  const h = harness([target]);
+  h.ports.execute = async (_target, plan) => plan.modelId === 'local-rules-v1' ? { status: 'needs-mapping', reason: '请核对' } as any : { status: 'verified', reason: 'ok' };
+  h.ports.decide = async fields => fields.map(target => decision(target, 'personal.name', undefined, { nextAction: 'requestMeaning' }));
+  await h.controller.run(); assert(h.controller.items[0].resolvedBinding);
+  h.ports.decide = async fields => { assert.equal(fields[0].resolvedBinding, undefined); return fields.map(target => decision(target, 'personal.phone')); };
+  await h.controller.confirmMeaning(h.controller.items[0], { id: 'correction', enabled: true, origin: 'https://test.example', signature: 'name', meaningId: 'personal.phone', profileVersion: snapshot.version, registryVersion: context.registryVersion, confirmedAt: '2026-09-30' });
+  assert.equal(h.controller.counts.verified, 1); assert.equal(h.controller.items[0].decision?.meaningId, 'personal.phone');
+});
+test('fixed reference dates make expired-fact evaluation reproducible', () => {
+  const timed = { ...profile, personal: { ...profile.personal, additionalFields: [{ id: 'availability', meaningId: 'personal.extra.availability', subject: 'self', label: '到岗日期', value: '2026-10-12', valueType: 'date' as const, updatedAt: '2026-09-01', expiresAt: '2026-10-01' }] } };
+  assert(!createProfileSnapshot(timed, 'default', undefined, '2026-09-30').facts.find(fact => fact.id === 'personal-extra:availability')?.conflict);
+  assert(createProfileSnapshot(timed, 'default', undefined, '2026-10-02').facts.find(fact => fact.id === 'personal-extra:availability')?.conflict);
+});
+test('provider rejects a guessed valid fact ID that was not sent in the reduced context', async () => {
+  const bound = field('name', { resolvedBinding: { meaningId: 'personal.name', subject: 'self', factId: snapshot.facts[0].id } });
+  const provider = new LLMDecisionProvider({ provider: 'custom', apiKey: '', baseUrl: 'http://local', model: 'fixture' }, {
+    chat: async messages => {
+      const input = JSON.parse(messages[1].content as string);
+      assert.deepEqual(input.profile.facts.map(fact => fact.id), [snapshot.facts[0].id]);
+      return { content: JSON.stringify({ decisions: [decision(bound, 'personal.phone')] }) } as any;
+    },
+  });
+  const result = await provider.decide(request([bound]), new AbortController().signal);
+  assert.equal(result[0].nextAction, 'requestMeaning');
+});
+test('a later field cannot change a previously established education record', () => {
+  const target = field('major');
+  const input = { ...request([target]), establishedBindings: [{ groupId: 'g1', meaningId: 'education.school', recordId: 'edu1', factId: snapshot.facts.find(fact => fact.meaningId === 'education.school' && fact.recordId === 'edu1')!.id }] };
+  const wrong = decision(target, 'education.degree', 'edu2');
+  assert(validateDecision(wrong, target, input).error);
+  assert(!validateDecision(decision(target, 'education.degree', 'edu1'), target, input).error);
 });
 
 
@@ -326,4 +433,3 @@ test('task panel implements refill experience design with two-section list, sing
   assert.match(panel, /SAVE_PERSONAL_FIELD/);
   assert.match(panel, /SAVE_ADDITIONAL_FACT/);
 });
-

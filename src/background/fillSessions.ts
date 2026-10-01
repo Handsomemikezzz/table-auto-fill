@@ -45,7 +45,7 @@ export async function beginFillSession(payload: { sessionId: string; sourceId: s
   sessions.set(payload.sessionId, { ...context, origin, owner: ownerOf(sender), provider: modelAvailable ? new LLMDecisionProvider(config!) : undefined, controller: new AbortController(), createdAt: Date.now(), baseProfileVersion, attachmentId: attachment?.id, attachmentVersion: attachment ? versionOf(attachment.fileData) : undefined });
   return context;
 }
-export async function decideFillFields(payload: { sessionId: string; fields: FieldObservation[]; corrections?: MeaningCorrection[] }, sender: chrome.runtime.MessageSender) {
+export async function decideFillFields(payload: { sessionId: string; fields: FieldObservation[]; corrections?: MeaningCorrection[]; establishedBindings?: import('../autofill/contracts.ts').DecisionRequest['establishedBindings'] }, sender: chrome.runtime.MessageSender) {
   const session = sessions.get(payload.sessionId);
   if (!session || session.owner !== ownerOf(sender) || session.controller.signal.aborted) throw new Error('填写会话已停止，请重新开始');
   if (!session.provider) throw new Error('尚未配置 AI，规则填写已完成');
@@ -54,7 +54,9 @@ export async function decideFillFields(payload: { sessionId: string; fields: Fie
   if (!currentProfile || createProfileSnapshot(currentProfile, session.profile.sourceId, session.registry).version !== session.baseProfileVersion) throw new Error('资料已更新，请重新开始填写');
   const corrections = (payload.corrections || []).filter(item => item.enabled && item.confirmedAt && payload.fields.some(field => (field.origin || session.origin) === item.origin && field.signature === item.signature) && item.profileVersion === session.profile.version && item.registryVersion === session.registryVersion && payload.fields.some(field => field.signature === item.signature));
   const executionEvidence: ControlExperience[] = [];
-  const request = { executionEvidence, fields: payload.fields, profile: session.profile, registry: session.registry, registryVersion: session.registryVersion, corrections };
+  const establishedBindings = (payload.establishedBindings || []).filter(binding => payload.fields.some(field => field.groupId === binding.groupId)
+    && session.profile.facts.some(fact => fact.id === binding.factId && fact.meaningId === binding.meaningId && fact.recordId === binding.recordId));
+  const request = { executionEvidence, fields: payload.fields, profile: session.profile, registry: session.registry, registryVersion: session.registryVersion, corrections, establishedBindings };
   if (session.controller.signal.aborted) throw new Error('填写已停止');
   const controller = new AbortController();
   const cancel = () => controller.abort();

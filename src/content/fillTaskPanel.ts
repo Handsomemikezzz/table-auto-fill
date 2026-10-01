@@ -565,6 +565,9 @@ export function createFillTaskPanel(
   }
 
   function renderList(card: HTMLElement) {
+    const counts = session?.counts || { verified: 0, assisted: 0, skipped: 0, existing: 0, missing: 0, todo: 0 };
+    if (session && counts && session.phase === 'complete' && previousPhase !== 'complete' && counts.todo === 0 && !session.error) expanded = false;
+    if (session) previousPhase = session.phase;
     const brandRow = el('div', undefined, 'brand-row');
     brandRow.append(el('span', 'Job ApplyMate'));
     const brandRight = el('div', undefined, 'brand-status');
@@ -575,7 +578,7 @@ export function createFillTaskPanel(
     } else {
       const toggleBtn = el('button', expanded ? '收起' : '展开', 'btn-text');
       toggleBtn.onclick = () => { expanded = !expanded; render(); };
-      brandRight.append(el('span', '交互设计预览'), toggleBtn);
+      brandRight.append(el('span', session.phase === 'stopped' ? '已停止' : counts.todo > 0 ? '待检查' : '填写结束'), toggleBtn);
     }
     brandRow.append(brandRight);
     card.append(brandRow);
@@ -586,12 +589,6 @@ export function createFillTaskPanel(
       card.append(el('p', message, 'subtitle-summary'));
       return;
     }
-
-    const counts = session.counts;
-    if (session.phase === 'complete' && previousPhase !== 'complete' && counts.todo === 0 && !session.error) {
-      expanded = false;
-    }
-    previousPhase = session.phase;
 
     const verifiedCount = counts.verified + counts.assisted;
     const todoCount = counts.todo;
@@ -694,6 +691,7 @@ export function createFillTaskPanel(
         row.append(info);
 
         const btn = el('button', '补充', 'btn-outline');
+        btn.setAttribute('aria-label', `补充${item.observation.label}`);
         btn.onclick = () => {
           activeFieldId = item.observation.fieldId;
           viewMode = 'single';
@@ -1311,6 +1309,7 @@ export function createFillTaskPanel(
     if (hasOptions) {
       // 真实网页选项 (Section 5)
       const select = el('select');
+      select.setAttribute('aria-label', '补充个人资料');
       select.append(el('option', '请选择网页选项'));
       item.observation.options.forEach(opt => {
         const optionEl = el('option', opt.label);
@@ -1329,6 +1328,7 @@ export function createFillTaskPanel(
       // 年龄输入 + "岁"
       const group = el('div', undefined, 'unit-input-group');
       const numInput = el('input');
+      numInput.setAttribute('aria-label', '补充个人资料');
       numInput.type = 'number';
       numInput.min = '1';
       numInput.max = '120';
@@ -1343,6 +1343,7 @@ export function createFillTaskPanel(
     if (isUrl) {
       // URL 输入
       const urlInput = el('input');
+      urlInput.setAttribute('aria-label', '补充个人资料');
       urlInput.type = 'url';
       urlInput.placeholder = 'https://...';
       urlInput.value = draft.value;
@@ -1354,6 +1355,7 @@ export function createFillTaskPanel(
     if (isCity) {
       // 期望城市 + 快捷标签
       const cityInput = el('input');
+      cityInput.setAttribute('aria-label', '补充个人资料');
       cityInput.placeholder = '例如 北京、上海';
       cityInput.value = draft.value;
       cityInput.oninput = () => { draft.value = cityInput.value; };
@@ -1447,6 +1449,7 @@ export function createFillTaskPanel(
 
     // Default text or textarea
     const textInput = el('input');
+    textInput.setAttribute('aria-label', '补充个人资料');
     textInput.placeholder = '输入内容';
     textInput.value = draft.value;
     textInput.oninput = () => { draft.value = textInput.value; };

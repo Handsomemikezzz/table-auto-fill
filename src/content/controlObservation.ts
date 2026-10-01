@@ -17,8 +17,8 @@ export interface ControlObservation {
 const identities = new WeakMap<Element, string>();
 const associatedPopup = new WeakMap<HTMLElement, HTMLElement>();
 const popupOwners = new WeakMap<HTMLElement, HTMLElement>();
-export const KNOWN_COMBOBOX_SELECTOR = '.ant-select, .el-select, .MuiAutocomplete-root, .react-select__control, .semi-select, .arco-select, .ud__select, .ant-cascader, .el-cascader, .arco-cascader, .semi-cascader';
-export const KNOWN_POPUP_SELECTOR = '[role="listbox"], [role="tree"], .ant-select-dropdown, .el-select-dropdown, .MuiAutocomplete-popper, .react-select__menu, .semi-select-dropdown, .arco-select-popup, .ud__select__dropdown';
+export const KNOWN_COMBOBOX_SELECTOR = '.ant-select, .el-select, .MuiAutocomplete-root, .react-select__control, .semi-select, .arco-select, .ud__select, .atsx-select, [class*="sd-Select-container-"], .ant-cascader, .el-cascader, .arco-cascader, .semi-cascader';
+export const KNOWN_POPUP_SELECTOR = '[role="listbox"], [role="tree"], .ant-select-dropdown, .el-select-dropdown, .MuiAutocomplete-popper, .react-select__menu, .semi-select-dropdown, .arco-select-popup, .ud__select__dropdown, .ud__treeSelect__overlay, .atsx-select-dropdown';
 let nextIdentity = 0;
 export function getControlIdentity(element: Element): string {
   let identity = identities.get(element);
@@ -65,6 +65,11 @@ export function getOptionLabel(element: HTMLElement): string {
   if (isNativeInput(element)) {
     const labels = Array.from(element.labels || []).map(label => cleanControlText(label.textContent)).filter(Boolean);
     return labels.join(' ') || cleanControlText(element.closest('label')?.textContent);
+  }
+  if (element.matches('.ud__tree__node')) {
+    const clone = element.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll('.ud__tree__node, .ud__tree__node-switcher').forEach(child => child.remove());
+    return cleanControlText(clone.textContent);
   }
   return cleanControlText(element.textContent);
 }
@@ -131,7 +136,7 @@ export function getAssociatedPopups(element: HTMLElement): HTMLElement[] {
     `${control!.getAttribute('aria-controls') || ''} ${control!.getAttribute('aria-owns') || ''}`.split(/\s+/).filter(Boolean)
   )));
   const popups = Array.from(ids).map(id => root.getElementById(id)).filter((popup): popup is HTMLElement => Boolean(popup))
-    .map(popup => popup.closest<HTMLElement>('.ant-select-dropdown, .el-select-dropdown, .MuiAutocomplete-popper, .react-select__menu, .semi-select-dropdown, .arco-select-popup, .ud__select__dropdown') || popup);
+    .map(popup => popup.closest<HTMLElement>('.ant-select-dropdown, .el-select-dropdown, .MuiAutocomplete-popper, .react-select__menu, .semi-select-dropdown, .arco-select-popup, .ud__select__dropdown, .atsx-select-dropdown') || popup);
   const associated = associatedPopup.get(element);
   if (!popups.length && associated?.isConnected && popupOwners.get(associated) === element) popups.push(associated);
   if (!popups.length) popups.push(...Array.from(element.querySelectorAll<HTMLElement>('[role="listbox"], [role="tree"]')));
@@ -142,6 +147,59 @@ export function bindAssociatedPopup(element: HTMLElement, popup: HTMLElement): v
   associatedPopup.set(element, popup);
   popupOwners.set(popup, element);
 }
+/** Unique nearby popups of the same known component can also be already open. */
+export function associateNearbyPopup(element: HTMLElement): boolean {
+  if (getAssociatedPopups(element).some(isVisibleControl)) return true;
+  const anchor = element.closest<HTMLElement>(KNOWN_COMBOBOX_SELECTOR);
+  if (!anchor) return false;
+  const selectors: [string, string][] = [
+    ['.ud__select', '.ud__select__dropdown, .ud__treeSelect__overlay'], ['.atsx-select', '.atsx-select-dropdown'],
+    ['.ant-select', '.ant-select-dropdown'], ['.el-select', '.el-select-dropdown'],
+    ['.semi-select', '.semi-select-dropdown'], ['.arco-select', '.arco-select-popup'],
+    ['.MuiAutocomplete-root', '.MuiAutocomplete-popper'], ['.react-select__control', '.react-select__menu'],
+  ];
+  const component = selectors.find(([control]) => anchor.matches(control));
+  if (!component) return false;
+  const [controlSelector, selector] = component;
+  const root = element.getRootNode() as Document | ShadowRoot;
+  const rect = anchor.getBoundingClientRect();
+  const visible = Array.from(root.querySelectorAll<HTMLElement>(selector)).filter(isVisibleControl);
+  const candidates = visible.filter(popup => !visible.some(other => other !== popup && other.contains(popup))).filter(popup => {
+    const owner = popupOwners.get(popup);
+    if (owner && owner !== element && owner.isConnected) return false;
+    const bounds = popup.getBoundingClientRect();
+    const distance = Math.min(Math.abs(bounds.top - rect.bottom), Math.abs(bounds.bottom - rect.top));
+    if (!(bounds.left < rect.right && bounds.right > rect.left && distance < 80)) return false;
+    // An orphan popup equally close to another control has no proven owner.
+    return !Array.from(root.querySelectorAll<HTMLElement>(controlSelector)).some(other => {
+      if (other === anchor || anchor.contains(other) || other.contains(anchor) || !isVisibleControl(other)) return false;
+      const box = other.getBoundingClientRect();
+      return bounds.left < box.right && bounds.right > box.left
+        && Math.min(Math.abs(bounds.top - box.bottom), Math.abs(bounds.bottom - box.top)) <= distance + 2;
+    });
+  });
+  if (candidates.length !== 1) return false;
+  bindAssociatedPopup(element, candidates[0]); return true;
+}
+export function isMultipleControl(element: HTMLElement): boolean {
+  return getControlKind(element) === 'checkbox' || (isNativeSelect(element) && element.multiple)
+    || element.getAttribute('aria-multiselectable') === 'true'
+    || getAssociatedPopups(element).some(popup => popup.getAttribute('aria-multiselectable') === 'true')
+    || Boolean(element.closest('.ant-select-multiple, .el-select--multiple, .semi-select-multiple, .arco-select-view-multiple, [data-multiple="true"]'))
+    || Boolean(element.closest('.ud__select__selector-multiple, .atsx-select-selection--multiple'))
+    || Boolean((element.closest('.ud__select, .atsx-select') || element).querySelector('.MuiAutocomplete-tag, .react-select__multi-value__label, .ud__select__selector-multiple, .atsx-select-selection--multiple'));
+}
+export function isUdTreeBranch(node: HTMLElement): boolean {
+  return Boolean(node.querySelector('.ud__tree__node, .ud__tree__node-switcher:not(.ud__tree__node-switcher-noop)'));
+}
+export function udTreeCheckbox(node: HTMLElement): HTMLInputElement | undefined {
+  return Array.from(node.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).find(input => input.closest('.ud__tree__node') === node);
+}
+export function udTreePath(node: HTMLElement): string[] {
+  const path = [getOptionLabel(node)];
+  for (let parent = node.parentElement?.closest<HTMLElement>('.ud__tree__node'); parent; parent = parent.parentElement?.closest<HTMLElement>('.ud__tree__node')) path.unshift(getOptionLabel(parent));
+  return path;
+}
 export function getEditableElement(element: HTMLElement): HTMLInputElement | HTMLTextAreaElement | null {
   if (isNativeInput(element) || isNativeTextArea(element)) return element;
   return element.querySelector<HTMLInputElement | HTMLTextAreaElement>('input:not([type="hidden"]), textarea');
@@ -149,6 +207,7 @@ export function getEditableElement(element: HTMLElement): HTMLInputElement | HTM
 export function isOptionSelected(element: HTMLElement): boolean {
   if (element.tagName === 'OPTION') return (element as HTMLOptionElement).selected;
   if (isNativeInput(element)) return element.checked;
+  if (element.matches('.ud__tree__node')) return Boolean(udTreeCheckbox(element)?.checked);
   return element.getAttribute('aria-selected') === 'true' || element.getAttribute('aria-checked') === 'true';
 }
 export function getOptions(element: HTMLElement): ObservedOption[] {
@@ -156,12 +215,14 @@ export function getOptions(element: HTMLElement): ObservedOption[] {
   const candidates: HTMLElement[] = kind === 'select'
     ? Array.from((element as HTMLSelectElement).options)
     : (kind === 'radio' || kind === 'checkbox') ? getControlGroup(element)
-      : kind === 'combobox' ? getAssociatedPopups(element).flatMap(popup => Array.from(popup.querySelectorAll<HTMLElement>('[role="option"], [role="treeitem"], .ant-select-item-option, .el-select-dropdown__item, .MuiAutocomplete-option, .react-select__option, .semi-select-option, .arco-select-option, .ud__select__list__item')))
+      : kind === 'combobox' ? getAssociatedPopups(element).flatMap(popup => Array.from(popup.querySelectorAll<HTMLElement>('[role="option"], [role="treeitem"], .ant-select-item-option, .el-select-dropdown__item, .MuiAutocomplete-option, .react-select__option, .semi-select-option, .arco-select-option, .ud__select__list__item, .ud__tree__node')))
         : [];
-  return candidates.filter(candidate => kind !== 'combobox' || isVisibleControl(candidate)).map(candidate => ({
+  return [...new Set(candidates)].filter(candidate => kind !== 'combobox' || isVisibleControl(candidate)).map(candidate => ({
     id: getControlIdentity(candidate), element: candidate, label: getOptionLabel(candidate),
     rawValue: isNativeInput(candidate) || candidate.tagName === 'OPTION' ? (candidate as HTMLInputElement | HTMLOptionElement).value : candidate.getAttribute('data-value') ?? undefined,
+    ...(candidate.matches('.ud__tree__node') ? { path: udTreePath(candidate), parentId: candidate.parentElement?.closest('.ud__tree__node') ? getControlIdentity(candidate.parentElement.closest('.ud__tree__node')!) : undefined } : {}),
     disabled: isDisabledControl(candidate)
+      || (candidate.matches('.ud__tree__node') && (isUdTreeBranch(candidate) || Boolean(udTreeCheckbox(candidate)?.disabled)))
       || candidate.matches('.is-disabled, .ant-select-item-option-disabled, .semi-select-option-disabled, .arco-select-option-disabled')
       || (candidate.tagName === 'OPTION' && Boolean(candidate.closest('optgroup[disabled]'))),
   })).filter(option => Boolean(option.label));
@@ -179,15 +240,19 @@ export function getControlValue(element: HTMLElement): string {
     const explicitValue = cleanControlText(element.getAttribute('aria-valuetext') || editor?.getAttribute('aria-valuetext'));
     if (explicitValue) return explicitValue;
     // An editable combobox's input value is its query, not evidence of selection.
-    const container = element.closest('.ant-select, .el-select, .MuiAutocomplete-root, .react-select__control, .semi-select, .arco-select, .ud__select') || element;
-    const tokens = Array.from(container.querySelectorAll<HTMLElement>('.ant-select-selection-item, .ant-select-content-has-value, .el-select__selected-item, .MuiChip-label, .react-select__single-value, .react-select__multi-value__label, .semi-select-selection-text, .arco-select-view-value, .ud__select__selector__selectItem'))
+    const container = element.closest('.ant-select, .el-select, .MuiAutocomplete-root, .react-select__control, .semi-select, .arco-select, .ud__select, .atsx-select') || element;
+    const tokenElements = Array.from(container.querySelectorAll<HTMLElement>('.ant-select-selection-item, .ant-select-content-has-value, .el-select__selected-item, .MuiChip-label, .react-select__single-value, .react-select__multi-value__label, .semi-select-selection-text, .arco-select-view-value, .ud__select__selector__selectItem, .atsx-select-selection-item, .atsx-select-selection-item-content'));
+    const tokens = tokenElements.filter(token => !tokenElements.some(other => other !== token && token.contains(other)))
       .filter(token => !token.matches('.is-placeholder, .el-select__placeholder, [data-placeholder]')
         && !getAssociatedPopups(element).some(popup => popup.contains(token)))
-      .map(token => cleanControlText(token.textContent)).filter(text => text && !isPlaceholderLabel(text));
+      .map(token => {
+        const clone = token.cloneNode(true) as HTMLElement;
+        clone.querySelectorAll('button, [aria-hidden="true"]').forEach(node => node.remove());
+        return cleanControlText(clone.textContent);
+      }).filter(text => text && !isPlaceholderLabel(text));
     if (tokens.length) return [...new Set(tokens)].join('、');
     const activeDescendant = editor?.getAttribute('aria-activedescendant') || element.getAttribute('aria-activedescendant');
-    const multiple = element.getAttribute('aria-multiselectable') === 'true'
-      || getAssociatedPopups(element).some(popup => popup.getAttribute('aria-multiselectable') === 'true');
+    const multiple = isMultipleControl(element);
     const committedOptions = getOptions(element).filter(option => option.element.getAttribute('aria-checked') === 'true'
       || (multiple && isOptionSelected(option.element) && option.element.id !== activeDescendant));
     if (committedOptions.length) return committedOptions.map(option => option.label).join('、');
@@ -214,6 +279,8 @@ export function observeControl(element: HTMLElement): ControlObservation {
     optionsComplete: kind !== 'combobox' || (popups.length > 0 && popups.every(popup => (
       isVisibleControl(popup) &&
       popup.getAttribute('aria-busy') !== 'true'
+      && !Array.from(popup.querySelectorAll<HTMLElement>('.ud__tree__node')).some(node => isVisibleControl(node) && isUdTreeBranch(node)
+        && !Array.from(node.querySelectorAll<HTMLElement>('.ud__tree__node')).some(isVisibleControl))
       && !popup.querySelector('[aria-setsize], [aria-posinset], [class*="virtual"]')
       && popup.scrollHeight <= popup.clientHeight
     ))),
@@ -233,6 +300,7 @@ export function discoverControls(root: Document | ShadowRoot | HTMLElement): HTM
   const seenGroups = new Set<HTMLElement>();
   for (const element of candidates) {
     if (element.closest(pluginUi)) continue;
+    if (element.closest(KNOWN_POPUP_SELECTOR)) continue;
     if (!isVisibleControl(element) || getControlKind(element) === 'unsupported') continue;
     const owner = element.parentElement?.closest<HTMLElement>(`[role="combobox"], [role="radio"], [role="checkbox"], [contenteditable="true"], [contenteditable="plaintext-only"], ${KNOWN_COMBOBOX_SELECTOR}`);
     if (owner && root.contains(owner)) continue;

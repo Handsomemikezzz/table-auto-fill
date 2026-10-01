@@ -1,0 +1,348 @@
+{
+  "schemaVersion": 1,
+  "scope": "local-controlled-fixtures",
+  "passed": 68,
+  "failed": 0,
+  "checks": [
+    {
+      "name": "UD 普通单选保留正常行为",
+      "status": "passed",
+      "elapsedMs": 642
+    },
+    {
+      "name": "UD 预先展开的弹层仍能确定归属",
+      "status": "passed",
+      "elapsedMs": 617
+    },
+    {
+      "name": "UD 模糊弹层归属不会操作另一个控件",
+      "status": "passed",
+      "elapsedMs": 1285
+    },
+    {
+      "name": "UD 隐藏后复用同一弹层仍能完成第二次选择",
+      "status": "passed",
+      "elapsedMs": 1274
+    },
+    {
+      "name": "UD TreeSelect 取消后不选择叶子",
+      "status": "passed",
+      "elapsedMs": 38
+    },
+    {
+      "name": "UD 多选提交两个真实答案",
+      "status": "passed",
+      "elapsedMs": 694
+    },
+    {
+      "name": "UD TreeSelect 展开父级并选择叶子",
+      "status": "passed",
+      "elapsedMs": 643
+    },
+    {
+      "name": "UD TreeSelect 多选叶子且保持真实选择状态",
+      "status": "passed",
+      "elapsedMs": 686
+    },
+    {
+      "name": "UD TreeSelect 完整路径只选择其父级下的叶子",
+      "status": "passed",
+      "elapsedMs": 642
+    },
+    {
+      "name": "UD TreeSelect 错误父路径不能仅凭同名叶子填写",
+      "status": "passed",
+      "elapsedMs": 136
+    },
+    {
+      "name": "UD TreeSelect 父节点不能代替叶子选择",
+      "status": "passed",
+      "elapsedMs": 135
+    },
+    {
+      "name": "UD 弹层内部复选节点不成为新表单字段",
+      "status": "passed",
+      "elapsedMs": 37
+    },
+    {
+      "name": "ATSX 已选标签可读回且保留原值",
+      "status": "passed",
+      "elapsedMs": 41
+    },
+    {
+      "name": "留出 AvePoint 原生结构：身份填写、原值保护与不明确单选交接",
+      "status": "passed",
+      "elapsedMs": 1446
+    },
+    {
+      "name": "Moka 未读取的下拉不能通过写搜索框虚报选择成功",
+      "status": "passed",
+      "elapsedMs": 1241
+    },
+    {
+      "name": "React 受控文本：DOM 写入同步到组件状态",
+      "status": "passed",
+      "elapsedMs": 523
+    },
+    {
+      "name": "原生下拉：男对应 0",
+      "status": "passed",
+      "elapsedMs": 510
+    },
+    {
+      "name": "原生下拉：男对应 1，映射反转仍正确",
+      "status": "passed",
+      "elapsedMs": 499
+    },
+    {
+      "name": "原生单选：男对应 0，React checked 状态正确",
+      "status": "passed",
+      "elapsedMs": 499
+    },
+    {
+      "name": "纯 ARIA 单选：不依赖原生 input",
+      "status": "passed",
+      "elapsedMs": 496
+    },
+    {
+      "name": "纯 ARIA 单选发现为一个逻辑字段，题目来自 radiogroup",
+      "status": "passed",
+      "elapsedMs": 37
+    },
+    {
+      "name": "纯 ARIA 下拉：等待异步选项并提交选择",
+      "status": "passed",
+      "elapsedMs": 705
+    },
+    {
+      "name": "真实 Ant Design Select 提交组件值",
+      "status": "passed",
+      "elapsedMs": 922
+    },
+    {
+      "name": "搜索词已写入但选项未提交，不能报成功",
+      "status": "passed",
+      "elapsedMs": 1839
+    },
+    {
+      "name": "搜索建议已高亮 selected 但业务值未提交，不能报成功",
+      "status": "passed",
+      "elapsedMs": 1838
+    },
+    {
+      "name": "不会点击不属于当前字段的弹层选项",
+      "status": "passed",
+      "elapsedMs": 1748
+    },
+    {
+      "name": "React 延迟回滚不能计成功",
+      "status": "passed",
+      "elapsedMs": 1836
+    },
+    {
+      "name": "原有错误单选不会因为存在 checked 就报成功",
+      "status": "passed",
+      "elapsedMs": 36
+    },
+    {
+      "name": "年月资料可写入 month 控件",
+      "status": "passed",
+      "elapsedMs": 570
+    },
+    {
+      "name": "年月资料不能静默补成某一天",
+      "status": "passed",
+      "elapsedMs": 35
+    },
+    {
+      "name": "真实 Ant Design 日期控件：readonly 输入通过日历选择",
+      "status": "passed",
+      "elapsedMs": 648
+    },
+    {
+      "name": "真实 Ant Design 月份控件：保持年月精度",
+      "status": "passed",
+      "elapsedMs": 629
+    },
+    {
+      "name": "未知 readonly 日期控件明确 unsupported",
+      "status": "passed",
+      "elapsedMs": 36
+    },
+    {
+      "name": "级联地区只沿目标父节点选择同名子节点",
+      "status": "passed",
+      "elapsedMs": 716
+    },
+    {
+      "name": "级联地区无明确分段时不能猜测路径",
+      "status": "passed",
+      "elapsedMs": 34
+    },
+    {
+      "name": "真实 Ant Design Cascader 沿父级逐列选择",
+      "status": "passed",
+      "elapsedMs": 778
+    },
+    {
+      "name": "真实键盘输入中止自动填写，保留用户改动",
+      "status": "passed",
+      "elapsedMs": 397
+    },
+    {
+      "name": "保留已有字段后撤销，不覆盖用户原值",
+      "status": "passed",
+      "elapsedMs": 45
+    },
+    {
+      "name": "用户中途编辑后撤销，不覆盖用户新值",
+      "status": "passed",
+      "elapsedMs": 165
+    },
+    {
+      "name": "原来未选择的单选无法通用清空时，撤销不能虚报恢复",
+      "status": "passed",
+      "elapsedMs": 498
+    },
+    {
+      "name": "后续字段联动清空前一字段时重新验证扣除成功数",
+      "status": "passed",
+      "elapsedMs": 2850
+    },
+    {
+      "name": "扩展 FILL_FORM：react-text",
+      "status": "passed",
+      "elapsedMs": 825
+    },
+    {
+      "name": "扩展 FILL_FORM：select-zero",
+      "status": "passed",
+      "elapsedMs": 785
+    },
+    {
+      "name": "扩展 FILL_FORM：select-one",
+      "status": "passed",
+      "elapsedMs": 801
+    },
+    {
+      "name": "扩展 FILL_FORM：radio-zero",
+      "status": "passed",
+      "elapsedMs": 804
+    },
+    {
+      "name": "扩展 FILL_FORM：aria-radio",
+      "status": "passed",
+      "elapsedMs": 798
+    },
+    {
+      "name": "扩展 FILL_FORM：aria-combobox",
+      "status": "passed",
+      "elapsedMs": 952
+    },
+    {
+      "name": "扩展 FILL_FORM：ant-select",
+      "status": "passed",
+      "elapsedMs": 880
+    },
+    {
+      "name": "扩展 FILL_FORM：month",
+      "status": "passed",
+      "elapsedMs": 782
+    },
+    {
+      "name": "扩展 FILL_FORM：picker-day",
+      "status": "passed",
+      "elapsedMs": 879
+    },
+    {
+      "name": "扩展 FILL_FORM：picker-month",
+      "status": "passed",
+      "elapsedMs": 876
+    },
+    {
+      "name": "扩展 FILL_FORM：飞书深层起止框与失焦日期格式化",
+      "status": "passed",
+      "elapsedMs": 2474
+    },
+    {
+      "name": "扩展 FILL_FORM：多条教育经历按整条记录绑定，缺字段不串行",
+      "status": "passed",
+      "elapsedMs": 3025
+    },
+    {
+      "name": "扩展 FILL_FORM：通用起止时间组归属同一教育记录",
+      "status": "passed",
+      "elapsedMs": 1900
+    },
+    {
+      "name": "扩展 FILL_FORM：rollback 不虚报成功",
+      "status": "passed",
+      "elapsedMs": 1966
+    },
+    {
+      "name": "扩展 FILL_FORM：day-precision 不虚报成功",
+      "status": "passed",
+      "elapsedMs": 225
+    },
+    {
+      "name": "扩展 FILL_FORM：search-rejected 不虚报成功",
+      "status": "passed",
+      "elapsedMs": 10071
+    },
+    {
+      "name": "扩展 FILL_FORM：search-highlight 不虚报成功",
+      "status": "passed",
+      "elapsedMs": 3967
+    },
+    {
+      "name": "模型返回不存在的事实时不填写",
+      "status": "passed",
+      "elapsedMs": 226
+    },
+    {
+      "name": "未配置模型仍然完成规则填写",
+      "status": "passed",
+      "elapsedMs": 766
+    },
+    {
+      "name": "停止本地填写后不再填写后续字段或上传附件",
+      "status": "passed",
+      "elapsedMs": 1520
+    },
+    {
+      "name": "所选附件独立上传，仍使用通用资料",
+      "status": "passed",
+      "elapsedMs": 1762
+    },
+    {
+      "name": "跨 frame 共用单个任务面板并优先规则填写",
+      "status": "passed",
+      "elapsedMs": 1458
+    },
+    {
+      "name": "模型主路径保留原有答案：existing-text",
+      "status": "passed",
+      "elapsedMs": 389
+    },
+    {
+      "name": "模型主路径保留原有答案：existing-radio",
+      "status": "passed",
+      "elapsedMs": 380
+    },
+    {
+      "name": "模型等待期间的用户编辑保持原样",
+      "status": "passed",
+      "elapsedMs": 926
+    },
+    {
+      "name": "模型兜底只接收剩余字段，失败后继续下一模块",
+      "status": "passed",
+      "elapsedMs": 1327
+    },
+    {
+      "name": "补充个人资料后跨网站复用，没提供的字段保持空白",
+      "status": "passed",
+      "elapsedMs": 4956
+    }
+  ]
+}

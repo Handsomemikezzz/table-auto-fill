@@ -30,6 +30,8 @@ export class FieldMatcher {
     const asksThirdPartyContact = /紧急\s*联系(?:人|方式|电话)?|应急\s*联系(?:人|方式|电话)?|紧急\s*联络(?:人|方式|电话)?|家庭\s*联系(?:人|方式|电话)?|家属\s*联系(?:人|方式|电话)?|监护人|(?:^|\s)(?:emergency\s*contact|guardian)(?:$|\s)/i
       .test(`${primary} ${context}`);
     if (asksThirdPartyContact) return { fieldType: FieldType.UNKNOWN, confidence: 0 };
+    // Career entry is not the start date of a particular work record.
+    if (/首次.*(?:工作|就业)|参加工作|开始工作年月|first\s*(?:work|employment)|career\s*start/i.test(primary)) return { fieldType: FieldType.UNKNOWN, confidence: 0 };
 
     if (htmlType === 'email' || containsPattern(primary, 'email')) return { fieldType: FieldType.EMAIL, confidence: 1 };
     if (htmlType === 'tel' || /(?:^|\s)(?:phone|mobile|tel|telephone|cellphone)(?:$|\s)|手机|电话/.test(primary)) {

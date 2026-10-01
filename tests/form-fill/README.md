@@ -18,3 +18,11 @@
 这些用例验证填写契约和插件整合，不代表真实招聘网站的 80% 覆盖率。后者需要独立人工标注、按招聘系统及组件实现留出的真实表单样本。不要把该测试页的通过率当跨站覆盖率。
 
 日期专项可通过开发服务器打开 `/tests/form-fill/date-range-regression.html`，点击“运行日期回归”。它复现飞书系表单的深层共享 `start_end_time`、左右模块标题和失焦格式化，同时验证普通文本及日期精度保护。常规扩展回归也加入了同结构的 `feishu-deep-range` 用例。
+
+## 固定来源与结果查询
+
+本轮新增 UD / ATSX 诊断结构复现、Moka 未读取下拉的搜索输入保护，以及 AvePoint 原生表单结构留出检查。它们不是供应商完整运行时。测试确认取消、弹层归属、叶子及父路径、多选、已选值读回和独立业务状态。
+
+整页测试通过扩展内部 `GET_FILL_SESSION_RESULT` 消息查询主 frame 会话，并等待 `settled`。自动完成与辅助完成分别计数；界面文案变化不影响计数。设置 `JOB_APPLYMATE_REPORT_PATH` 可保存逐项结果与耗时。
+
+真实字段描述及评分输入见 [固定字段集](../site-eval/README.md)。完整结果与边界见 [本轮验证报告](../../docs/verification/2026-09-30-autofill-evaluation-and-improvement.md)。

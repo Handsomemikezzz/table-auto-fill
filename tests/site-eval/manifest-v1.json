@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "benchmarkVersion": "2026-09-30-v1",
+  "referenceDate": "2026-09-30",
+  "annotationStatus": "draft-requires-human-review",
+  "profiles": [
+    "profiles/complete.json",
+    "profiles/limited.json"
+  ],
+  "sites": [
+    {
+      "id": "feishu-xiaopeng",
+      "company": "小鹏",
+      "platform": "Feishu",
+      "split": "development",
+      "entryUrl": null,
+      "status": "diagnosis-derived-awaiting-entry",
+      "cases": [
+        "cases/feishu-xiaopeng-initial.json",
+        "cases/feishu-xiaopeng-options-open.json"
+      ]
+    },
+    {
+      "id": "moka-deepseek",
+      "company": "幻方与DeepSeek",
+      "platform": "Moka",
+      "split": "development",
+      "entryUrl": "https://app.mokahr.com/apply/high-flyer/140576#/job/a63f2346-b672-4c48-af43-0a64bfe97a41/apply?pure=1",
+      "status": "field-descriptors-captured",
+      "cases": [
+        "cases/moka-deepseek-initial.json",
+        "cases/moka-deepseek-options-open.json"
+      ]
+    },
+    {
+      "id": "beisen-dreame",
+      "company": "追觅",
+      "platform": "Beisen",
+      "split": "holdout",
+      "entryUrl": "https://dreame.zhiye.com/",
+      "status": "login-required-no-application-sample",
+      "cases": []
+    }
+  ],
+  "limitations": [
+    "只有两个来源共四个状态；第三个来源登录门槛未解决。",
+    "金标准为待用户审核的预期标注，不能称作已完成人工金标准。",
+    "字段匹配离线评测不代表浏览器自动完成率。",
+    "人工检查时间和真实模型结果尚未测量。"
+  ]
+}

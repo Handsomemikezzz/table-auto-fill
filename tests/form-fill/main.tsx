@@ -1,4 +1,6 @@
 import { ObservedDateRange } from './ObservedDateRange';
+import { ObservedUdSelect } from './ObservedUdSelect';
+import { ObservedAvePoint } from './ObservedAvePoint';
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
@@ -32,6 +34,8 @@ export function Fixture({ scenario }: { scenario: string }) {
   }, [expanded]);
 
   if (scenario === 'feishu-deep-range') return <ObservedDateRange />;
+  if (scenario === 'avepoint-native') return <ObservedAvePoint />;
+  if (scenario.startsWith('ud-') || scenario === 'atsx-selected' || scenario === 'moka-unread') return <ObservedUdSelect scenario={scenario} />;
 
   const text = (id: string, label: string, type = 'text') => <div className="field" key={id}>
     <label htmlFor={id}>{label}</label>
@@ -214,6 +218,10 @@ const fixture = {
       const observation = observeControl(element);
       return { kind: observation.kind, label: observation.label, optionLabels: observation.options.map(option => option.label) };
     });
+  },
+  async readValue(selector: string) {
+    const { getControlValue } = await import('../../src/content/controlObservation.ts');
+    return getControlValue(document.querySelector<HTMLElement>(selector)!);
   },
   async diagnose() {
     const { FormDetector } = await import('../../src/content/formDetector.ts');

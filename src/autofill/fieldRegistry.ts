@@ -29,5 +29,5 @@ export const registryVersion = (registry: FieldDefinition[]) => versionOf(regist
 export function meaningCandidates(label: string, registry: FieldDefinition[]): string[] {
   const ranked = [...registry].sort((a, b) => score(b) - score(a));
   function score(def: FieldDefinition) { return def.aliases.reduce((n, alias) => n + (label.toLowerCase().includes(alias.toLowerCase()) ? alias.length : 0), 0); }
-  return [...ranked.slice(0, 3).map(def => def.id), 'other', 'unknown'];
+  return [...ranked.filter(def => score(def) > 0).map(def => def.id), 'other', 'unknown'];
 }

@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "scope": "local-controlled-fixtures",
+  "passed": 2,
+  "failed": 5,
+  "checks": [
+    {
+      "name": "UD 普通单选保留正常行为",
+      "status": "passed",
+      "elapsedMs": 733
+    },
+    {
+      "name": "UD 预先展开的弹层仍能确定归属",
+      "status": "failed",
+      "elapsedMs": 1273,
+      "reason": "{\"status\":\"unsupported\",\"reason\":\"控件没有可确定关联的选项列表，需要专用适配或人工选择\",\"expectedValue\":\"男\",\"observedValue\":\"\",\"attempts\":0,\"fieldId\":\"control-4\",\"adapterId\":\"dom-combobox\"}\n+ actual - expected\n\n+ 'unsupported'\n- 'verified'\n"
+    },
+    {
+      "name": "UD 多选提交两个真实答案",
+      "status": "failed",
+      "elapsedMs": 93,
+      "reason": "{\"status\":\"needs-mapping\",\"reason\":\"网站中没有能确定匹配的选项\",\"expectedValue\":\"上海、北京\",\"observedValue\":\"\",\"attempts\":0,\"fieldId\":\"control-7\",\"adapterId\":\"dom-combobox\"}\n+ actual - expected\n\n+ 'needs-mapping'\n- 'verified'\n"
+    },
+    {
+      "name": "UD TreeSelect 展开父级并选择叶子",
+      "status": "failed",
+      "elapsedMs": 1123,
+      "reason": "{\"status\":\"needs-mapping\",\"reason\":\"网站中没有能确定匹配的选项\",\"expectedValue\":\"上海\",\"observedValue\":\"\",\"attempts\":0,\"fieldId\":\"control-8\",\"adapterId\":\"dom-combobox\"}\n+ actual - expected\n\n+ 'needs-mapping'\n- 'verified'\n"
+    },
+    {
+      "name": "UD TreeSelect 多选叶子且保持真实选择状态",
+      "status": "failed",
+      "elapsedMs": 1116,
+      "reason": "{\"status\":\"needs-mapping\",\"reason\":\"网站中没有能确定匹配的选项\",\"expectedValue\":\"上海、北京\",\"observedValue\":\"\",\"attempts\":0,\"fieldId\":\"control-9\",\"adapterId\":\"dom-combobox\"}\n+ actual - expected\n\n+ 'needs-mapping'\n- 'verified'\n"
+    },
+    {
+      "name": "UD TreeSelect 父节点不能代替叶子选择",
+      "status": "passed",
+      "elapsedMs": 1111
+    },
+    {
+      "name": "UD 弹层内部复选节点不成为新表单字段",
+      "status": "failed",
+      "elapsedMs": 36,
+      "reason": "[{\"kind\":\"combobox\",\"label\":\"期望工作地点\",\"optionLabels\":[]},{\"kind\":\"checkbox\",\"label\":\"华东地区\",\"optionLabels\":[\"华东地区\"]}]\n\n2 !== 1\n"
+    }
+  ]
+}

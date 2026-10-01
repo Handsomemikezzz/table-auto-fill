@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "benchmarkVersion": "2026-09-30-v2",
+  "referenceDate": "2026-09-30",
+  "annotationStatus": "draft-requires-human-review",
+  "profiles": [
+    "profiles/complete.json",
+    "profiles/limited.json"
+  ],
+  "sites": [
+    {
+      "id": "feishu-xiaopeng",
+      "company": "小鹏",
+      "platform": "Feishu",
+      "split": "development",
+      "entryUrl": "https://xiaopeng.jobs.feishu.cn/index/resume/edit",
+      "status": "diagnosis-derived-with-live-label-verification",
+      "cases": [
+        "cases/feishu-xiaopeng-initial.json",
+        "cases/feishu-xiaopeng-options-open.json"
+      ]
+    },
+    {
+      "id": "moka-deepseek",
+      "company": "幻方与DeepSeek",
+      "platform": "Moka",
+      "split": "development",
+      "entryUrl": "https://app.mokahr.com/apply/high-flyer/140576#/job/a63f2346-b672-4c48-af43-0a64bfe97a41/apply?pure=1",
+      "status": "field-descriptors-captured",
+      "cases": [
+        "cases/moka-deepseek-initial.json",
+        "cases/moka-deepseek-options-open.json"
+      ]
+    },
+    {
+      "id": "avepoint-native",
+      "company": "AvePoint 中国官网",
+      "platform": "Native corporate form",
+      "split": "holdout",
+      "entryUrl": "https://www.avepoint.com.cn/cn-recruitment/form/198",
+      "status": "field-descriptors-captured",
+      "cases": [
+        "cases/avepoint-native-initial.json",
+        "cases/avepoint-native-existing-answers.json"
+      ]
+    }
+  ],
+  "limitations": [
+    "三个来源共六个状态；飞书用例来自诊断结构，Moka 与 AvePoint 为真实字段描述。",
+    "已有答案状态是合成变体，状态重复不能作为新增独立网站样本。",
+    "预期答案为待用户审核标注，不能称作已完成人工金标准。",
+    "字段绑定离线结果不代表浏览器自动完成率。",
+    "人工检查时间和真实模型结果尚未测量。"
+  ]
+}

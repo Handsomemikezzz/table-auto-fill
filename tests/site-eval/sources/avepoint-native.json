@@ -1,0 +1,48 @@
+{
+  "capturedAt": "2026-09-30",
+  "captureMethod": "read-only-browser-dom",
+  "url": "https://www.avepoint.com.cn/cn-recruitment/form/198",
+  "title": "中文官网招聘 | AvePoint 招聘",
+  "fieldLabels": [
+    "姓名",
+    "年龄",
+    "性别",
+    "应聘地点",
+    "应聘岗位",
+    "学历",
+    "毕业院校",
+    "专业",
+    "手机号码",
+    "电子邮箱",
+    "上传简历"
+  ],
+  "names": [
+    "name",
+    "age",
+    "gender",
+    "location",
+    "job",
+    "education",
+    "school",
+    "speciality",
+    "tel",
+    "email",
+    "file"
+  ],
+  "degreeOptions": [
+    "请选择",
+    "博士",
+    "硕士",
+    "本科",
+    "大专"
+  ],
+  "genderOptions": [
+    "男",
+    "女"
+  ],
+  "locationOptions": [
+    "长春"
+  ],
+  "presetPosition": "网络安全工程师--IT方向",
+  "limitations": "公开原生表单；没有填写或提交。第二种评分状态是固定的合成原值保护场景，不代表另一个独立网站。"
+}

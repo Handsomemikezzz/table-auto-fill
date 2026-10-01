@@ -1,0 +1,45 @@
+{
+  "personal": {
+    "name": "合成候选人",
+    "gender": "男",
+    "birthDate": "1998-06",
+    "phone": "13800000000",
+    "email": "candidate@example.com",
+    "preferredCities": "上海、北京",
+    "currentAddress": "四川省 / 成都市 / 武侯区"
+  },
+  "education": [
+    {
+      "id": "edu-bachelor",
+      "school": "本科测试大学",
+      "degree": "本科",
+      "major": "计算机科学",
+      "startDate": "2016-09",
+      "endDate": "2020-06"
+    },
+    {
+      "id": "edu-master",
+      "school": "研究生测试大学",
+      "degree": "硕士",
+      "major": "软件工程",
+      "startDate": "2020-09",
+      "endDate": "2023-06"
+    }
+  ],
+  "experience": [
+    {
+      "id": "work-a",
+      "company": "测试公司甲",
+      "position": "开发工程师",
+      "startDate": "2023-07",
+      "endDate": "2025-06",
+      "description": "合成工作说明"
+    }
+  ],
+  "projects": [],
+  "skills": [
+    "TypeScript"
+  ],
+  "certifications": [],
+  "customInformation": []
+}

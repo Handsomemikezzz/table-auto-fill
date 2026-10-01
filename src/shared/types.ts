@@ -316,10 +316,11 @@ export interface VisualRegionFillMappingResult {
 
 // 消息类型定义
 export type Message =
+  | { type: 'GET_FILL_SESSION_RESULT'; payload?: { sessionId?: string } }
   | { type: 'FILL_PAGE_BRIDGE'; payload: Record<string, any> }
   | { type: 'FILL_LOCAL_BRIDGE'; payload: Record<string, any> }
   | { type: 'BEGIN_FILL_SESSION'; payload: { sessionId: string; sourceId: string; origin: string; attachmentId?: string | null } }
-  | { type: 'DECIDE_FILL_FIELDS'; payload: { sessionId: string; fields: FieldObservation[]; corrections?: MeaningCorrection[] } }
+  | { type: 'DECIDE_FILL_FIELDS'; payload: { sessionId: string; fields: FieldObservation[]; corrections?: MeaningCorrection[]; establishedBindings?: import('../autofill/contracts.ts').DecisionRequest['establishedBindings'] } }
   | { type: 'END_FILL_SESSION'; payload: { sessionId: string } }
   | { type: 'SAVE_MEANING_CORRECTION'; payload: MeaningCorrection }
   | { type: 'GET_CONTROL_EXPERIENCES'; payload?: null }

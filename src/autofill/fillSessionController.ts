@@ -1,12 +1,12 @@
 import { buildRuleDecisions } from './ruleDecisions.ts';
-import type { FillContextData, FieldObservation, FieldDecision, SessionItem, SessionPhase, MeaningCorrection } from './contracts.ts';
+import type { FillContextData, FieldObservation, FieldDecision, SessionItem, SessionPhase, MeaningCorrection, FillSessionResult, DecisionRequest } from './contracts.ts';
 import { versionOf } from './contracts.ts';
 import type { FillOutcome } from '../shared/fillModel.ts';
 import { validateModule } from './decisionValidation.ts';
 
 export interface FillSessionPorts {
   observe(): FieldObservation[] | Promise<FieldObservation[]>;
-  decide(fields: FieldObservation[], corrections: MeaningCorrection[]): Promise<FieldDecision[]>;
+  decide(fields: FieldObservation[], corrections: MeaningCorrection[], establishedBindings?: DecisionRequest['establishedBindings']): Promise<FieldDecision[]>;
   execute(field: FieldObservation, decision: FieldDecision, value: string, shouldContinue: () => boolean, overwrite?: boolean): Promise<FillOutcome>;
   verify(field: FieldObservation, decision: FieldDecision, value: string, shouldContinue: () => boolean): Promise<FillOutcome>;
   readOptions(field: FieldObservation, query: string | undefined, shouldContinue: () => boolean): Promise<void>;
@@ -21,11 +21,18 @@ export class FillSessionController {
   stopped = false;
   busy = false;
   error = '';
+  modelRequests = 0;
   corrections: MeaningCorrection[] = [];
   constructor(context: FillContextData, ports: FillSessionPorts) { this.context = context; this.ports = ports; this.corrections = context.corrections || []; }
   stop() { this.stopped = true; this.phase = 'stopped'; this.ports.cancel(); this.ports.update(); }
   get counts() {
     return { verified: this.items.filter(item => item.status === 'verified').length, assisted: this.items.filter(item => item.status === 'assisted').length, skipped: this.items.filter(item => item.status === 'skipped').length, existing: this.items.filter(item => item.status === 'existing').length, missing: this.items.filter(item => item.status === 'missing').length, todo: this.items.filter(item => item.status === 'todo' || item.status === 'pending').length };
+  }
+  get result(): FillSessionResult {
+    return { schemaVersion: 1, sessionId: this.context.sessionId, phase: this.phase, busy: this.busy,
+      settled: !this.busy && (this.phase === 'complete' || this.phase === 'stopped'), modelRequests: this.modelRequests,
+      counts: this.counts, fields: this.items.map(item => ({ fieldId: item.observation.fieldId, status: item.status,
+        outcome: item.outcome?.status, meaningId: item.decision?.meaningId, recordId: item.decision?.recordId })) };
   }
   private canContinue = () => !this.stopped;
   private fact(decision?: FieldDecision) { return this.context.profile.facts.find(fact => fact.id === decision?.factId); }
@@ -40,7 +47,8 @@ export class FillSessionController {
         if (this.stopped) break;
         await this.runGroup(groupId, true);
       }
-      for (const item of this.items) if (item.status === 'todo' && !['user-edited', 'cancelled', 'skipped-existing'].includes(item.outcome?.status || '')) item.status = 'pending';
+      for (const item of this.items) if (item.status === 'todo' && (item.outcome?.status === 'stale'
+        || (item.outcome?.status === 'needs-mapping' && ['select', 'radio', 'checkbox', 'combobox'].includes(item.observation.kind)))) item.status = 'pending';
       let discoveries = 0;
       while (!this.stopped) {
         const next = this.items.find(item => item.status === 'pending');
@@ -102,32 +110,36 @@ export class FillSessionController {
       for (const item of group.filter(item => !['verified', 'assisted', 'existing', 'skipped', 'missing'].includes(item.status))) {
         const current = observations.find(field => field.fieldId === item.observation.fieldId);
         if (!current) { this.fail(item, { status: 'stale', reason: '字段已被页面替换，请重新开始识别该区域' }); continue; }
+        if ((current.meaningVersion || current.signature) !== (item.observation.meaningVersion || item.observation.signature)) item.resolvedBinding = undefined;
         item.observation = current;
         if (!rulesOnly && current.currentValue && item.outcome && ['unverified', 'rejected', 'failed'].includes(item.outcome.status)) { item.status = 'todo'; continue; }
         if (!rulesOnly && current.currentValue) { item.status = 'existing'; item.reason = '已保留网页现有答案'; continue; }
         if (current.disabled || current.kind === 'unsupported') { this.fail(item, { status: 'unsupported', reason: '此控件当前不可自动操作，其他项目继续填写' }); continue; }
         if (current.ruleBinding && !current.currentValue && !this.context.profile.facts.some(fact => fact.meaningId === current.ruleBinding!.meaningId && fact.recordId === current.ruleBinding!.recordId)) { this.leaveEmpty(item); continue; }
-        fields.push({ ...current, evidence: evidence.get(current.fieldId) || current.evidence });
+        fields.push({ ...current, resolvedBinding: item.resolvedBinding, evidence: evidence.get(current.fieldId) || current.evidence });
       }
       for (let i = fields.length - 1; i >= 0; i--) if ((group.find(item => item.observation.fieldId === fields[i].fieldId)?.decisionAttempts || 0) >= 3) fields.splice(i, 1);
       if (!fields.length) break;
-      const fingerprint = versionOf(fields);
+      const fingerprint = versionOf(fields.map(({ evidence: _evidence, resolvedBinding: _binding, ...field }) => field));
       if (previousSnapshot === fingerprint) break;
       previousSnapshot = fingerprint;
       if (this.stopped) break;
       this.phase = rulesOnly ? 'rules' : 'matching'; this.ports.update();
       if (!rulesOnly) for (const field of fields) { const item = group.find(item => item.observation.fieldId === field.fieldId)!; item.decisionAttempts = (item.decisionAttempts || 0) + 1; }
       let decisions: FieldDecision[];
+      const establishedBindings = this.items.filter(item => item.observation.groupId === groupId
+        && ['verified', 'assisted', 'existing'].includes(item.status) && item.decision?.factId && item.decision?.recordId)
+        .map(item => ({ groupId, meaningId: item.decision!.meaningId!, recordId: item.decision!.recordId, factId: item.decision!.factId! }));
       if (rulesOnly) {
         decisions = buildRuleDecisions(fields, this.context, this.corrections);
         fields = fields.filter(field => decisions.some(decision => decision.fieldId === field.fieldId));
         if (!fields.length) break;
       } else if (this.context.modelAvailable === false) {
-        for (const field of fields) this.leaveEmpty(group.find(item => item.observation.fieldId === field.fieldId)!);
+        for (const field of fields) this.fail(group.find(item => item.observation.fieldId === field.fieldId)!, { status: 'needs-mapping', reason: '尚未配置 AI，请在网页中填写或使用资料助手' });
         break;
-      } else decisions = await this.ports.decide(fields, this.corrections);
+      } else { this.modelRequests++; decisions = await this.ports.decide(fields, this.corrections, establishedBindings); }
       if (this.stopped) break;
-      const request = { fields, profile: this.context.profile, registry: this.context.registry, registryVersion: this.context.registryVersion, corrections: this.corrections };
+      const request = { fields, profile: this.context.profile, registry: this.context.registry, registryVersion: this.context.registryVersion, corrections: this.corrections, establishedBindings };
       const errors = validateModule(decisions, request);
       const prior = this.items.filter(item => item.observation.groupId === groupId && ['verified', 'assisted', 'existing'].includes(item.status) && item.decision?.recordId);
       for (const decision of decisions) {
@@ -148,10 +160,11 @@ export class FillSessionController {
           this.fail(item, { status: 'needs-mapping', reason: '上游字段尚未完成，请先处理关联字段' }); continue;
         }
         if (!['write', 'select', 'readOptions'].includes(decision.nextAction) && field.currentValue) { item.status = 'existing'; item.reason = '已保留网页现有答案'; continue; }
-        if (decision.nextAction === 'requestFact' || (decision.nextAction === 'requestMeaning' && !fact && !this.context.profile.facts.some(fact => fact.meaningId === decision.meaningId))) { this.leaveEmpty(item); continue; }
+        if (decision.nextAction === 'requestFact' || (decision.nextAction === 'requestMeaning' && decision.meaningId && !fact && !this.context.profile.facts.some(fact => fact.meaningId === decision.meaningId))) { this.leaveEmpty(item); continue; }
         if (!['write', 'select', 'readOptions'].includes(decision.nextAction)) {
           this.fail(item, { status: 'needs-mapping', reason: decision.uncertaintyReason || '请确认此字段的含义或对应经历' }); continue;
         }
+        if (fact) item.resolvedBinding = { meaningId: fact.meaningId, subject: fact.subject, recordId: fact.recordId, factId: fact.id };
         const plan = versionOf({ action: decision.nextAction, fact: decision.factId, options: decision.targetOptionIds, snapshot: field.snapshotVersion });
         if (item.attemptedPlans.includes(plan)) { this.fail(item, { status: 'unsupported', reason: '已尝试此操作，请在网页中完成后检查' }); continue; }
         item.attemptedPlans.push(plan);
@@ -160,7 +173,9 @@ export class FillSessionController {
           if (field.currentValue) { item.status = 'existing'; item.reason = '已保留网页现有答案'; continue; }
           await this.ports.readOptions(field, fact?.value, this.canContinue).catch(() => {});
           this.fail(item, { status: 'needs-mapping', reason: '需要在网页下拉中选中，请在网页中选择' });
-          recovery = true;
+          const refreshed = (await this.ports.observe()).find(current => current.fieldId === field.fieldId);
+          recovery ||= Boolean(refreshed && (refreshed.optionsState !== field.optionsState || versionOf(refreshed.options) !== versionOf(field.options)
+            || (refreshed.meaningVersion || refreshed.signature) !== (field.meaningVersion || field.signature)));
         } else {
           const result = await this.ports.execute(field, decision, fact!.value, this.canContinue).catch((error): FillOutcome => ({ status: 'failed', reason: error instanceof Error ? error.message : '控件操作失败' }));
           item.outcome = result;
@@ -199,7 +214,7 @@ export class FillSessionController {
     if (this.busy || this.stopped) return;
     this.corrections.push(correction);
     const group = this.items.filter(peer => peer.observation.groupId === item.observation.groupId);
-    for (const peer of group) { peer.status = 'pending'; peer.attemptedPlans = []; peer.decisionAttempts = 0; }
+    for (const peer of group) { peer.status = 'pending'; peer.attemptedPlans = []; peer.decisionAttempts = 0; peer.resolvedBinding = undefined; }
     this.busy = true;
     try { await this.runGroup(item.observation.groupId); this.checkDateGroups(); }
     catch (error) { this.error = error instanceof Error ? error.message : '重新匹配失败'; }

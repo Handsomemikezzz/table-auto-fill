@@ -1,0 +1,295 @@
+{
+  "id": "moka-deepseek-options-open",
+  "siteId": "moka-deepseek",
+  "provenance": "read-only-browser-descriptors",
+  "annotationStatus": "draft-requires-human-review",
+  "annotationAuthor": "Codex",
+  "fields": [
+    {
+      "id": "cities",
+      "label": "意向工作城市",
+      "groupLabel": "个人信息",
+      "kind": "combobox",
+      "name": "",
+      "placeholder": "意向工作城市",
+      "options": [],
+      "currentValue": "",
+      "expected": {
+        "complete": {
+          "policy": "auto",
+          "meaningId": "personal.preferredCities",
+          "recordId": null
+        },
+        "limited": {
+          "policy": "missing",
+          "meaningId": "personal.preferredCities",
+          "recordId": null
+        }
+      },
+      "optionsState": "unread"
+    },
+    {
+      "id": "resume",
+      "label": "上传简历",
+      "groupLabel": "个人信息",
+      "kind": "file",
+      "name": "",
+      "placeholder": "上传简历",
+      "options": [],
+      "currentValue": "",
+      "expected": {
+        "complete": {
+          "policy": "manual",
+          "meaningId": null,
+          "recordId": null
+        },
+        "limited": {
+          "policy": "manual",
+          "meaningId": null,
+          "recordId": null
+        }
+      },
+      "optionsState": "complete"
+    },
+    {
+      "id": "photo",
+      "label": "上传照片",
+      "groupLabel": "个人信息",
+      "kind": "file",
+      "name": "",
+      "placeholder": "上传照片",
+      "options": [],
+      "currentValue": "",
+      "expected": {
+        "complete": {
+          "policy": "manual",
+          "meaningId": null,
+          "recordId": null
+        },
+        "limited": {
+          "policy": "manual",
+          "meaningId": null,
+          "recordId": null
+        }
+      },
+      "optionsState": "complete"
+    },
+    {
+      "id": "name",
+      "label": "姓名",
+      "groupLabel": "个人信息",
+      "kind": "text",
+      "name": "",
+      "placeholder": "姓名",
+      "options": [],
+      "currentValue": "",
+      "expected": {
+        "complete": {
+          "policy": "auto",
+          "meaningId": "personal.name",
+          "recordId": null
+        },
+        "limited": {
+          "policy": "auto",
+          "meaningId": "personal.name",
+          "recordId": null
+        }
+      },
+      "optionsState": "complete"
+    },
+    {
+      "id": "prefix",
+      "label": "国际区号",
+      "groupLabel": "个人信息",
+      "kind": "text",
+      "name": "",
+      "placeholder": "国际区号",
+      "options": [],
+      "currentValue": "+86",
+      "expected": {
+        "complete": {
+          "policy": "preserve",
+          "meaningId": null,
+          "recordId": null
+        },
+        "limited": {
+          "policy": "preserve",
+          "meaningId": null,
+          "recordId": null
+        }
+      },
+      "optionsState": "complete"
+    },
+    {
+      "id": "phone",
+      "label": "手机号码",
+      "groupLabel": "个人信息",
+      "kind": "text",
+      "name": "",
+      "placeholder": "手机号码",
+      "options": [],
+      "currentValue": "",
+      "expected": {
+        "complete": {
+          "policy": "auto",
+          "meaningId": "personal.phone",
+          "recordId": null
+        },
+        "limited": {
+          "policy": "missing",
+          "meaningId": "personal.phone",
+          "recordId": null
+        }
+      },
+      "optionsState": "complete"
+    },
+    {
+      "id": "email",
+      "label": "邮箱",
+      "groupLabel": "个人信息",
+      "kind": "text",
+      "name": "",
+      "placeholder": "邮箱",
+      "options": [],
+      "currentValue": "",
+      "expected": {
+        "complete": {
+          "policy": "auto",
+          "meaningId": "personal.email",
+          "recordId": null
+        },
+        "limited": {
+          "policy": "auto",
+          "meaningId": "personal.email",
+          "recordId": null
+        }
+      },
+      "optionsState": "complete"
+    },
+    {
+      "id": "degree",
+      "label": "最高学历",
+      "groupLabel": "个人信息",
+      "kind": "combobox",
+      "name": "",
+      "placeholder": "最高学历",
+      "options": [
+        "本科",
+        "硕士",
+        "博士",
+        "高中",
+        "大专",
+        "中专",
+        "初中及以下",
+        "MBA",
+        "其他"
+      ],
+      "currentValue": "",
+      "expected": {
+        "complete": {
+          "policy": "auto",
+          "meaningId": "education.degree",
+          "recordId": "edu-master"
+        },
+        "limited": {
+          "policy": "auto",
+          "meaningId": "education.degree",
+          "recordId": "edu-bachelor"
+        }
+      },
+      "optionsState": "complete"
+    },
+    {
+      "id": "first-work",
+      "label": "开始工作年月",
+      "groupLabel": "个人信息",
+      "kind": "text",
+      "name": "",
+      "placeholder": "开始工作年月",
+      "options": [],
+      "currentValue": "",
+      "expected": {
+        "complete": {
+          "policy": "manual",
+          "meaningId": null,
+          "recordId": null
+        },
+        "limited": {
+          "policy": "manual",
+          "meaningId": null,
+          "recordId": null
+        }
+      },
+      "optionsState": "complete"
+    },
+    {
+      "id": "personal-email",
+      "label": "个人邮箱",
+      "groupLabel": "个人信息",
+      "kind": "text",
+      "name": "",
+      "placeholder": "个人邮箱",
+      "options": [],
+      "currentValue": "",
+      "expected": {
+        "complete": {
+          "policy": "auto",
+          "meaningId": "personal.email",
+          "recordId": null
+        },
+        "limited": {
+          "policy": "auto",
+          "meaningId": "personal.email",
+          "recordId": null
+        }
+      },
+      "optionsState": "complete"
+    },
+    {
+      "id": "channel",
+      "label": "招聘渠道",
+      "groupLabel": "个人信息",
+      "kind": "combobox",
+      "name": "",
+      "placeholder": "招聘渠道",
+      "options": [],
+      "currentValue": "",
+      "expected": {
+        "complete": {
+          "policy": "manual",
+          "meaningId": null,
+          "recordId": null
+        },
+        "limited": {
+          "policy": "manual",
+          "meaningId": null,
+          "recordId": null
+        }
+      },
+      "optionsState": "unread"
+    },
+    {
+      "id": "consent",
+      "label": "确认声明",
+      "groupLabel": "个人信息",
+      "kind": "checkbox",
+      "name": "",
+      "placeholder": "确认声明",
+      "options": [],
+      "currentValue": "",
+      "expected": {
+        "complete": {
+          "policy": "manual",
+          "meaningId": null,
+          "recordId": null
+        },
+        "limited": {
+          "policy": "manual",
+          "meaningId": null,
+          "recordId": null
+        }
+      },
+      "optionsState": "complete"
+    }
+  ]
+}

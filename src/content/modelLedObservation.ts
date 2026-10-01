@@ -1,8 +1,9 @@
+import { expandUdTreeOptions, supportsUdTreeSelect } from './udTreeSelectAdapter.ts';
 import { matchSupplementDefinition } from '../shared/personalFields.ts';
 import { meaningForRule, profileForRuleBinding } from '../autofill/ruleDecisions.ts';
 import type { ProfileSnapshot } from '../autofill/contracts.ts';
 import type { DetectedField } from '../shared/types.ts';
-import { discoverControls, observeControl, getControlIdentity, getOptions, getEditableElement, getAssociatedPopups, bindAssociatedPopup, isVisibleControl, KNOWN_POPUP_SELECTOR, KNOWN_COMBOBOX_SELECTOR } from './controlObservation.ts';
+import { discoverControls, observeControl, getControlIdentity, getOptions, getEditableElement, getAssociatedPopups, bindAssociatedPopup, associateNearbyPopup, isVisibleControl, KNOWN_POPUP_SELECTOR, KNOWN_COMBOBOX_SELECTOR } from './controlObservation.ts';
 import { FieldMatcher } from '../utils/fieldMatcher.ts';
 import { findFormSectionHeading } from '../utils/formContext.ts';
 import { dateRangePart, bindFieldRecords, type RecordBinding } from './fieldBinding.ts';
@@ -65,7 +66,8 @@ export function createPageObserver(registry: FieldDefinition[], region?: DOMRect
         optionsState: observation.optionsComplete ? 'complete' as const : options.length ? 'partial' as const : 'unread' as const,
         ruleBinding, candidates: meaningCandidates(`${groupLabel} ${label}`, registry),
       };
-      return { ...data, snapshotVersion: versionOf(data) };
+      const { options: _options, ...meaningShape } = shape;
+      return { ...data, meaningVersion: versionOf(meaningShape), snapshotVersion: versionOf(data) };
     });
   }
   return { observe, nodes, groupNodes };
@@ -90,6 +92,7 @@ export async function readModelOptions(element: HTMLElement, query: string | und
   const before = new Set(Array.from(root.querySelectorAll<HTMLElement>(KNOWN_POPUP_SELECTOR)).filter(isVisibleControl));
   const editor = getEditableElement(element);
   const trigger = element.querySelector<HTMLElement>('.ant-select-selector, .el-select__wrapper, .ud__select__selector') || editor || element;
+  associateNearbyPopup(element);
   if (!getAssociatedPopups(element).some(isVisibleControl)) {
     trigger.focus();
     trigger.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
@@ -98,7 +101,7 @@ export async function readModelOptions(element: HTMLElement, query: string | und
   }
   for (let step = 0; step < 12 && shouldContinue(); step++) {
     await new Promise(resolve => setTimeout(resolve, 50));
-    if (getAssociatedPopups(element).some(isVisibleControl)) break;
+    if (getAssociatedPopups(element).some(isVisibleControl) || associateNearbyPopup(element)) break;
     const anchor = element.closest(KNOWN_COMBOBOX_SELECTOR) || element;
     const rect = anchor.getBoundingClientRect();
     const opened = Array.from(root.querySelectorAll<HTMLElement>(KNOWN_POPUP_SELECTOR)).filter(popup => !before.has(popup) && isVisibleControl(popup));
@@ -112,6 +115,7 @@ export async function readModelOptions(element: HTMLElement, query: string | und
     if (getOptions(element).length && getAssociatedPopups(element).every(popup => popup.getAttribute('aria-busy') !== 'true')) break;
     await new Promise(resolve => setTimeout(resolve, 50));
   }
+  if (shouldContinue() && supportsUdTreeSelect(element)) await expandUdTreeOptions(element, shouldContinue);
   if (shouldContinue() && query && editor && !editor.readOnly && !editor.disabled && !editor.value && getAssociatedPopups(element).length) {
     Object.getOwnPropertyDescriptor(editor.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, 'value')?.set?.call(editor, query);
     editor.dispatchEvent(new Event('input', { bubbles: true }));

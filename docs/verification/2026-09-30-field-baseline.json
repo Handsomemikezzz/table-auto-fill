@@ -1,0 +1,937 @@
+{
+  "benchmarkVersion": "2026-09-30-v1",
+  "inputHash": "4e6b76261480a611d0cb4120bea59f61871ea12b10ebf35bf1837c79064de5ad",
+  "mode": "rules",
+  "annotationStatus": "draft-requires-human-review",
+  "scope": "offline-fact-binding-only",
+  "limitations": [
+    "只有两个来源共四个状态；第三个来源登录门槛未解决。",
+    "金标准为待用户审核的预期标注，不能称作已完成人工金标准。",
+    "字段匹配离线评测不代表浏览器自动完成率。",
+    "人工检查时间和真实模型结果尚未测量。",
+    "Prepared bindings do not measure control discovery or browser execution."
+  ],
+  "unavailableSites": [
+    {
+      "id": "beisen-dreame",
+      "status": "login-required-no-application-sample"
+    }
+  ],
+  "totals": {
+    "runs": 8,
+    "fields": 80,
+    "eligible": 40,
+    "correctPrepared": 28,
+    "incorrectAttempts": 4
+  },
+  "runs": [
+    {
+      "sampleId": "feishu-xiaopeng-initial",
+      "siteId": "feishu-xiaopeng",
+      "profileId": "complete",
+      "provenance": "diagnosis-derived-structure",
+      "total": 8,
+      "eligible": 6,
+      "correctPrepared": 2,
+      "attempted": 2,
+      "incorrectAttempts": 0,
+      "missed": 0,
+      "unresolved": 4,
+      "rows": [
+        {
+          "fieldId": "name",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "personal.name",
+          "reason": "write"
+        },
+        {
+          "fieldId": "phone",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "personal.phone",
+          "reason": "write"
+        },
+        {
+          "fieldId": "cities",
+          "policy": "auto",
+          "detected": true,
+          "attempted": false,
+          "correct": false,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "school",
+          "policy": "auto",
+          "detected": true,
+          "attempted": false,
+          "correct": false,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "start",
+          "policy": "auto",
+          "detected": true,
+          "attempted": false,
+          "correct": false,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "end",
+          "policy": "auto",
+          "detected": true,
+          "attempted": false,
+          "correct": false,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "emergency",
+          "policy": "missing",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "motivation",
+          "policy": "manual",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        }
+      ],
+      "elapsedMs": 1,
+      "modelRequests": 0,
+      "modelFailures": 0
+    },
+    {
+      "sampleId": "feishu-xiaopeng-initial",
+      "siteId": "feishu-xiaopeng",
+      "profileId": "limited",
+      "provenance": "diagnosis-derived-structure",
+      "total": 8,
+      "eligible": 4,
+      "correctPrepared": 4,
+      "attempted": 4,
+      "incorrectAttempts": 0,
+      "missed": 0,
+      "unresolved": 0,
+      "rows": [
+        {
+          "fieldId": "name",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "personal.name",
+          "reason": "write"
+        },
+        {
+          "fieldId": "phone",
+          "policy": "missing",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "cities",
+          "policy": "missing",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "school",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "education.school",
+          "recordId": "edu-bachelor",
+          "reason": "write"
+        },
+        {
+          "fieldId": "start",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "education.startDate",
+          "recordId": "edu-bachelor",
+          "reason": "write"
+        },
+        {
+          "fieldId": "end",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "education.endDate",
+          "recordId": "edu-bachelor",
+          "reason": "write"
+        },
+        {
+          "fieldId": "emergency",
+          "policy": "missing",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "motivation",
+          "policy": "manual",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        }
+      ],
+      "elapsedMs": 0,
+      "modelRequests": 0,
+      "modelFailures": 0
+    },
+    {
+      "sampleId": "feishu-xiaopeng-options-open",
+      "siteId": "feishu-xiaopeng",
+      "profileId": "complete",
+      "provenance": "diagnosis-derived-structure",
+      "total": 8,
+      "eligible": 6,
+      "correctPrepared": 2,
+      "attempted": 2,
+      "incorrectAttempts": 0,
+      "missed": 0,
+      "unresolved": 4,
+      "rows": [
+        {
+          "fieldId": "name",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "personal.name",
+          "reason": "write"
+        },
+        {
+          "fieldId": "phone",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "personal.phone",
+          "reason": "write"
+        },
+        {
+          "fieldId": "cities",
+          "policy": "auto",
+          "detected": true,
+          "attempted": false,
+          "correct": false,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "school",
+          "policy": "auto",
+          "detected": true,
+          "attempted": false,
+          "correct": false,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "start",
+          "policy": "auto",
+          "detected": true,
+          "attempted": false,
+          "correct": false,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "end",
+          "policy": "auto",
+          "detected": true,
+          "attempted": false,
+          "correct": false,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "emergency",
+          "policy": "missing",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "motivation",
+          "policy": "manual",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        }
+      ],
+      "elapsedMs": 0,
+      "modelRequests": 0,
+      "modelFailures": 0
+    },
+    {
+      "sampleId": "feishu-xiaopeng-options-open",
+      "siteId": "feishu-xiaopeng",
+      "profileId": "limited",
+      "provenance": "diagnosis-derived-structure",
+      "total": 8,
+      "eligible": 4,
+      "correctPrepared": 4,
+      "attempted": 4,
+      "incorrectAttempts": 0,
+      "missed": 0,
+      "unresolved": 0,
+      "rows": [
+        {
+          "fieldId": "name",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "personal.name",
+          "reason": "write"
+        },
+        {
+          "fieldId": "phone",
+          "policy": "missing",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "cities",
+          "policy": "missing",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "school",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "education.school",
+          "recordId": "edu-bachelor",
+          "reason": "write"
+        },
+        {
+          "fieldId": "start",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "education.startDate",
+          "recordId": "edu-bachelor",
+          "reason": "write"
+        },
+        {
+          "fieldId": "end",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "education.endDate",
+          "recordId": "edu-bachelor",
+          "reason": "write"
+        },
+        {
+          "fieldId": "emergency",
+          "policy": "missing",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "motivation",
+          "policy": "manual",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        }
+      ],
+      "elapsedMs": 0,
+      "modelRequests": 0,
+      "modelFailures": 0
+    },
+    {
+      "sampleId": "moka-deepseek-initial",
+      "siteId": "moka-deepseek",
+      "profileId": "complete",
+      "provenance": "read-only-browser-descriptors",
+      "total": 12,
+      "eligible": 6,
+      "correctPrepared": 4,
+      "attempted": 5,
+      "incorrectAttempts": 1,
+      "missed": 0,
+      "unresolved": 2,
+      "rows": [
+        {
+          "fieldId": "cities",
+          "policy": "auto",
+          "detected": true,
+          "attempted": false,
+          "correct": false,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "resume",
+          "policy": "manual",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "photo",
+          "policy": "manual",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "name",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "personal.name",
+          "reason": "write"
+        },
+        {
+          "fieldId": "prefix",
+          "policy": "preserve",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "phone",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "personal.phone",
+          "reason": "write"
+        },
+        {
+          "fieldId": "email",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "personal.email",
+          "reason": "write"
+        },
+        {
+          "fieldId": "degree",
+          "policy": "auto",
+          "detected": true,
+          "attempted": false,
+          "correct": false,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "first-work",
+          "policy": "manual",
+          "detected": true,
+          "attempted": true,
+          "correct": false,
+          "prepared": true,
+          "meaningId": "experience.startDate",
+          "recordId": "work-a",
+          "reason": "write"
+        },
+        {
+          "fieldId": "personal-email",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "personal.email",
+          "reason": "write"
+        },
+        {
+          "fieldId": "channel",
+          "policy": "manual",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "consent",
+          "policy": "manual",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        }
+      ],
+      "elapsedMs": 0,
+      "modelRequests": 0,
+      "modelFailures": 0
+    },
+    {
+      "sampleId": "moka-deepseek-initial",
+      "siteId": "moka-deepseek",
+      "profileId": "limited",
+      "provenance": "read-only-browser-descriptors",
+      "total": 12,
+      "eligible": 4,
+      "correctPrepared": 4,
+      "attempted": 5,
+      "incorrectAttempts": 1,
+      "missed": 0,
+      "unresolved": 0,
+      "rows": [
+        {
+          "fieldId": "cities",
+          "policy": "missing",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "resume",
+          "policy": "manual",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "photo",
+          "policy": "manual",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "name",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "personal.name",
+          "reason": "write"
+        },
+        {
+          "fieldId": "prefix",
+          "policy": "preserve",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "phone",
+          "policy": "missing",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "email",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "personal.email",
+          "reason": "write"
+        },
+        {
+          "fieldId": "degree",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "education.degree",
+          "recordId": "edu-bachelor",
+          "reason": "write"
+        },
+        {
+          "fieldId": "first-work",
+          "policy": "manual",
+          "detected": true,
+          "attempted": true,
+          "correct": false,
+          "prepared": true,
+          "meaningId": "experience.startDate",
+          "recordId": "work-a",
+          "reason": "write"
+        },
+        {
+          "fieldId": "personal-email",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "personal.email",
+          "reason": "write"
+        },
+        {
+          "fieldId": "channel",
+          "policy": "manual",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "consent",
+          "policy": "manual",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        }
+      ],
+      "elapsedMs": 0,
+      "modelRequests": 0,
+      "modelFailures": 0
+    },
+    {
+      "sampleId": "moka-deepseek-options-open",
+      "siteId": "moka-deepseek",
+      "profileId": "complete",
+      "provenance": "read-only-browser-descriptors",
+      "total": 12,
+      "eligible": 6,
+      "correctPrepared": 4,
+      "attempted": 5,
+      "incorrectAttempts": 1,
+      "missed": 0,
+      "unresolved": 2,
+      "rows": [
+        {
+          "fieldId": "cities",
+          "policy": "auto",
+          "detected": true,
+          "attempted": false,
+          "correct": false,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "resume",
+          "policy": "manual",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "photo",
+          "policy": "manual",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "name",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "personal.name",
+          "reason": "write"
+        },
+        {
+          "fieldId": "prefix",
+          "policy": "preserve",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "phone",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "personal.phone",
+          "reason": "write"
+        },
+        {
+          "fieldId": "email",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "personal.email",
+          "reason": "write"
+        },
+        {
+          "fieldId": "degree",
+          "policy": "auto",
+          "detected": true,
+          "attempted": false,
+          "correct": false,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "first-work",
+          "policy": "manual",
+          "detected": true,
+          "attempted": true,
+          "correct": false,
+          "prepared": true,
+          "meaningId": "experience.startDate",
+          "recordId": "work-a",
+          "reason": "write"
+        },
+        {
+          "fieldId": "personal-email",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "personal.email",
+          "reason": "write"
+        },
+        {
+          "fieldId": "channel",
+          "policy": "manual",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "consent",
+          "policy": "manual",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        }
+      ],
+      "elapsedMs": 0,
+      "modelRequests": 0,
+      "modelFailures": 0
+    },
+    {
+      "sampleId": "moka-deepseek-options-open",
+      "siteId": "moka-deepseek",
+      "profileId": "limited",
+      "provenance": "read-only-browser-descriptors",
+      "total": 12,
+      "eligible": 4,
+      "correctPrepared": 4,
+      "attempted": 5,
+      "incorrectAttempts": 1,
+      "missed": 0,
+      "unresolved": 0,
+      "rows": [
+        {
+          "fieldId": "cities",
+          "policy": "missing",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "resume",
+          "policy": "manual",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "photo",
+          "policy": "manual",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "name",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "personal.name",
+          "reason": "write"
+        },
+        {
+          "fieldId": "prefix",
+          "policy": "preserve",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "phone",
+          "policy": "missing",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "email",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "personal.email",
+          "reason": "write"
+        },
+        {
+          "fieldId": "degree",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "education.degree",
+          "recordId": "edu-bachelor",
+          "reason": "write"
+        },
+        {
+          "fieldId": "first-work",
+          "policy": "manual",
+          "detected": true,
+          "attempted": true,
+          "correct": false,
+          "prepared": true,
+          "meaningId": "experience.startDate",
+          "recordId": "work-a",
+          "reason": "write"
+        },
+        {
+          "fieldId": "personal-email",
+          "policy": "auto",
+          "detected": true,
+          "attempted": true,
+          "correct": true,
+          "prepared": true,
+          "meaningId": "personal.email",
+          "reason": "write"
+        },
+        {
+          "fieldId": "channel",
+          "policy": "manual",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        },
+        {
+          "fieldId": "consent",
+          "policy": "manual",
+          "detected": true,
+          "attempted": false,
+          "correct": true,
+          "prepared": false,
+          "reason": "模型未返回唯一决策"
+        }
+      ],
+      "elapsedMs": 0,
+      "modelRequests": 0,
+      "modelFailures": 0
+    }
+  ]
+}

@@ -27,12 +27,12 @@ export function matchSupplementDefinition(label: string, registry: FieldDefiniti
 }
 
 /** Read existing global answers as well as first-class personal properties. */
-export function getPersonalFieldValue(profile: UserProfile, definition: FieldDefinition): string {
+export function getPersonalFieldValue(profile: UserProfile, definition: FieldDefinition, referenceDate = new Date().toISOString().slice(0, 10)): string {
   const direct = profile.personal[definition.key as keyof UserProfile['personal']];
   if (typeof direct === 'string') return direct.trim();
   const aliases = new Set([definition.label, ...definition.aliases].map(normalizePersonalFieldLabel));
   const matches = [
-    ...getPersonalAdditionalFields(profile).filter(field => field.subject === 'self' && !field.recordId && aliases.has(normalizePersonalFieldLabel(field.label)) && (!field.expiresAt || field.expiresAt >= new Date().toISOString().slice(0, 10))).map(field => field.value.trim()),
+    ...getPersonalAdditionalFields(profile).filter(field => field.subject === 'self' && !field.recordId && aliases.has(normalizePersonalFieldLabel(field.label)) && (!field.expiresAt || field.expiresAt >= referenceDate)).map(field => field.value.trim()),
     ...(profile.customInformation || []).filter(field => aliases.has(normalizePersonalFieldLabel(field.name))).map(field => field.content.trim()),
   ].filter(Boolean);
   const values = [...new Set(matches)];

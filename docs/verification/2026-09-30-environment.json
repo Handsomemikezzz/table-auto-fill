@@ -1,0 +1,12 @@
+{
+  "sourceRevisionBefore": "4a3c96846650354685d0a9020dc012a0fa723ea9",
+  "sourceHashAfter": "81fb6745cc79e86d2d7a4491d92c065689ff5a1c747cd8bca35cb71c3ac6f604",
+  "node": "v24.16.0",
+  "browser": "Google Chrome for Testing 143.0.7499.4",
+  "unitAndComponentTests": 286,
+  "browserTests": 68,
+  "status": "passed",
+  "realModelEvaluated": false,
+  "humanAnnotationsReviewed": false,
+  "humanTimeMeasured": false
+}

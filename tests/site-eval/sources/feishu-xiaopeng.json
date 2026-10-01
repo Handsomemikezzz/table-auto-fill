@@ -1,0 +1,43 @@
+{
+  "capturedAt": "2026-09-30",
+  "captureMethod": "read-only-browser-dom",
+  "entryUrl": "https://xiaopeng.jobs.feishu.cn/index/resume/view",
+  "observedUrl": "https://xiaopeng.jobs.feishu.cn/index/resume/edit",
+  "fieldLabels": [
+    "简历附件",
+    "姓名",
+    "手机号码",
+    "邮箱",
+    "学校名称",
+    "学历",
+    "专业",
+    "起止时间",
+    "没有工作经历"
+  ],
+  "educationOptions": [
+    "博士",
+    "MBA",
+    "硕士",
+    "本科",
+    "大专",
+    "高中",
+    "专职",
+    "初中",
+    "小学"
+  ],
+  "markers": [
+    "ud__native-input",
+    "ud__select__selector__search__input",
+    "ud__checkbox__input"
+  ],
+  "fieldNames": [
+    "attachment_resume",
+    "name",
+    "email",
+    "school",
+    "degree",
+    "field_of_study",
+    "start_end_time"
+  ],
+  "limitations": "只读标签和属性，未保存现有个人值。评分用例沿用此前诊断结构；本次标签采集作为来源补充，不宣称复制了整张编辑页。"
+}

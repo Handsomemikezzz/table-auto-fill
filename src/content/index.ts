@@ -72,8 +72,8 @@ async function startFill(sourceId = 'default', attachmentId?: string | null, reg
     const context = result.data;
     session = new FillSessionController(context, {
       observe: () => bridge<FieldObservation[]>({ action: 'observe', sessionId, registry: context.registry, profile: context.profile, region: regionData }),
-      decide: async (fields, corrections) => {
-        const response = await send<FieldDecision[]>({ type: 'DECIDE_FILL_FIELDS', payload: { sessionId, fields, corrections } });
+      decide: async (fields, corrections, establishedBindings) => {
+        const response = await send<FieldDecision[]>({ type: 'DECIDE_FILL_FIELDS', payload: { sessionId, fields, corrections, establishedBindings } });
         if (!response.success || !response.data) throw new Error(response.error || '暂时无法连接填写服务');
         return response.data;
       },
@@ -162,9 +162,14 @@ async function localOperation(payload: Record<string, any>) {
     return formFiller.executeDecision(element, payload.value, context);
   }
 }
-chrome.runtime.onMessage.addListener((message: Message, _sender, respond) => {
+chrome.runtime.onMessage.addListener((message: Message, sender, respond) => {
   const run = (operation: Promise<unknown>) => { operation.then(data => respond({ success: true, data })).catch(error => respond({ success: false, error: error instanceof Error ? error.message : '操作失败' })); return true; };
   switch (message.type) {
+    case 'GET_FILL_SESSION_RESULT':
+      if (sender.id !== chrome.runtime.id || window !== window.top || (message.payload?.sessionId && message.payload.sessionId !== session?.context.sessionId)) {
+        respond({ success: false, error: '填写会话访问无效' }); return false;
+      }
+      respond({ success: true, data: { starting, result: session?.result || null } }); return false;
     case 'PING_CONTENT': respond({ success: true, data: { ready: true } }); return false;
     case 'FILL_LOCAL_BRIDGE': return run(localOperation(message.payload));
     case 'START_FILL_SESSION':

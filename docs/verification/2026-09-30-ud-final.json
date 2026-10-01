@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "scope": "local-controlled-fixtures",
+  "passed": 12,
+  "failed": 0,
+  "checks": [
+    {
+      "name": "UD 普通单选保留正常行为",
+      "status": "passed",
+      "elapsedMs": 617
+    },
+    {
+      "name": "UD 预先展开的弹层仍能确定归属",
+      "status": "passed",
+      "elapsedMs": 670
+    },
+    {
+      "name": "UD 模糊弹层归属不会操作另一个控件",
+      "status": "passed",
+      "elapsedMs": 1292
+    },
+    {
+      "name": "UD 隐藏后复用同一弹层仍能完成第二次选择",
+      "status": "passed",
+      "elapsedMs": 1303
+    },
+    {
+      "name": "UD TreeSelect 取消后不选择叶子",
+      "status": "passed",
+      "elapsedMs": 38
+    },
+    {
+      "name": "UD 多选提交两个真实答案",
+      "status": "passed",
+      "elapsedMs": 686
+    },
+    {
+      "name": "UD TreeSelect 展开父级并选择叶子",
+      "status": "passed",
+      "elapsedMs": 679
+    },
+    {
+      "name": "UD TreeSelect 多选叶子且保持真实选择状态",
+      "status": "passed",
+      "elapsedMs": 688
+    },
+    {
+      "name": "UD TreeSelect 完整路径只选择其父级下的叶子",
+      "status": "passed",
+      "elapsedMs": 644
+    },
+    {
+      "name": "UD TreeSelect 错误父路径不能仅凭同名叶子填写",
+      "status": "passed",
+      "elapsedMs": 138
+    },
+    {
+      "name": "UD TreeSelect 父节点不能代替叶子选择",
+      "status": "passed",
+      "elapsedMs": 141
+    },
+    {
+      "name": "UD 弹层内部复选节点不成为新表单字段",
+      "status": "passed",
+      "elapsedMs": 40
+    }
+  ]
+}

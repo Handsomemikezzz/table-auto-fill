@@ -43,6 +43,8 @@ export interface ProfileSnapshot {
 export interface FieldObservation {
   fieldId: string;
   snapshotVersion: string;
+  meaningVersion?: string;
+  resolvedBinding?: { meaningId: string; subject: string; recordId?: string; factId: string };
   frameId: string;
   origin?: string;
   groupId: string;
@@ -97,6 +99,7 @@ export interface DecisionRequest {
   registryVersion: string;
   corrections: MeaningCorrection[];
   executionEvidence?: ControlExperience[];
+  establishedBindings?: { groupId: string; meaningId: string; recordId?: string; factId: string }[];
 }
 export interface DecisionProvider {
   readonly id: string;
@@ -119,8 +122,20 @@ export interface SessionItem {
   reason: string;
   attemptedPlans: string[];
   decisionAttempts?: number;
+  resolvedBinding?: FieldObservation['resolvedBinding'];
 }
 export type SessionPhase = 'understanding' | 'rules' | 'matching' | 'writing' | 'complete' | 'stopped';
+/** Read-only diagnostics. Never include profile values or webpage answers. */
+export interface FillSessionResult {
+  schemaVersion: 1;
+  sessionId: string;
+  phase: SessionPhase;
+  busy: boolean;
+  settled: boolean;
+  modelRequests: number;
+  counts: { verified: number; assisted: number; skipped: number; existing: number; missing: number; todo: number };
+  fields: { fieldId: string; status: SessionItem['status']; outcome?: FillOutcome['status']; meaningId?: string; recordId?: string }[];
+}
 export function versionOf(value: unknown): string {
   const text = JSON.stringify(value);
   let hash = 2166136261;

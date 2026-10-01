@@ -5,7 +5,7 @@ import { parseFlexibleDate } from '../utils/dateValue.ts';
 import { createFieldRegistry } from './fieldRegistry.ts';
 import { versionOf, type FieldDefinition, type ProfileSnapshot, type ProfileFact } from './contracts.ts';
 
-export function createProfileSnapshot(profile: UserProfile, sourceId = 'default', registry = createFieldRegistry(getPersonalAdditionalFields(profile))): ProfileSnapshot {
+export function createProfileSnapshot(profile: UserProfile, sourceId = 'default', registry = createFieldRegistry(getPersonalAdditionalFields(profile)), referenceDate = new Date().toISOString().slice(0, 10)): ProfileSnapshot {
   const variant = sourceId === 'default' ? undefined : getResumeLibrary(profile).find(item => item.id === sourceId);
   if (sourceId !== 'default' && !variant?.parsedProfile) throw new Error('所选资料已不存在，请重新选择');
   // One selected source; records from different resumes are never joined by index or school name.
@@ -21,7 +21,7 @@ export function createProfileSnapshot(profile: UserProfile, sourceId = 'default'
     if (def.sourceCollection === 'personal') {
       // Confirmed shared identity takes precedence over a file's parsed identity.
       const key = def.key as keyof UserProfile['personal'];
-      const sharedValue = key !== 'selfEvaluation' && getPersonalFieldValue(profile, def);
+      const sharedValue = key !== 'selfEvaluation' && getPersonalFieldValue(profile, def, referenceDate);
       const before = facts.length;
       add(def, sharedValue || source.personal?.[key]);
       if (variant && sharedValue && facts.length > before) facts.at(-1)!.source = '通用资料（优先使用已保存值）';
@@ -42,18 +42,18 @@ export function createProfileSnapshot(profile: UserProfile, sourceId = 'default'
   }
   for (const fact of getPersonalAdditionalFields(profile)) {
     const canonical = registry.find(def => def.sourceCollection === 'personal' && def.subject === fact.subject && [def.label, ...def.aliases].some(alias => normalizePersonalFieldLabel(alias) === normalizePersonalFieldLabel(fact.label)));
-    if (canonical && (typeof profile.personal[canonical.key as keyof UserProfile['personal']] === 'string' || getPersonalFieldValue(profile, canonical))) continue;
+    if (canonical && (typeof profile.personal[canonical.key as keyof UserProfile['personal']] === 'string' || getPersonalFieldValue(profile, canonical, referenceDate))) continue;
     const def = registry.find(def => def.id === fact.meaningId && def.subject === fact.subject);
     if (def) {
       const before = facts.length;
-      add(def, fact.value, fact.recordId, fact.expiresAt && fact.expiresAt < new Date().toISOString().slice(0, 10) ? '这条时效性资料已过期，请重新确认' : undefined);
+      add(def, fact.value, fact.recordId, fact.expiresAt && fact.expiresAt < referenceDate ? '这条时效性资料已过期，请重新确认' : undefined);
       if (facts.length > before) { facts.at(-1)!.id = `personal-extra:${fact.id}`; facts.at(-1)!.source = `个人资料 · ${fact.updatedAt}`; }
     }
   }
   for (const info of profile.customInformation || []) {
     if (!info.content.trim()) continue;
     const canonical = registry.find(def => def.sourceCollection === 'personal' && [def.label, ...def.aliases].some(alias => normalizePersonalFieldLabel(alias) === normalizePersonalFieldLabel(info.name)));
-    if (canonical && (typeof profile.personal[canonical.key as keyof UserProfile['personal']] === 'string' || getPersonalFieldValue(profile, canonical))) continue;
+    if (canonical && (typeof profile.personal[canonical.key as keyof UserProfile['personal']] === 'string' || getPersonalFieldValue(profile, canonical, referenceDate))) continue;
     facts.push({ id: `saved:${info.id}`, meaningId: `saved.${info.id}`, subject: 'self', value: info.content, source: `已保存答案：${info.name}` });
   }
   return { version: versionOf({ sourceId, facts }), sourceId, sourceLabel, facts };

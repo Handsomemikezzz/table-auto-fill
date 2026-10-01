@@ -1,0 +1,204 @@
+{
+  "id": "feishu-xiaopeng-initial",
+  "siteId": "feishu-xiaopeng",
+  "provenance": "diagnosis-derived-structure",
+  "annotationStatus": "draft-requires-human-review",
+  "annotationAuthor": "Codex",
+  "fields": [
+    {
+      "id": "name",
+      "label": "姓名",
+      "groupLabel": "个人信息",
+      "kind": "text",
+      "name": "",
+      "placeholder": "姓名",
+      "options": [],
+      "currentValue": "",
+      "expected": {
+        "complete": {
+          "policy": "auto",
+          "meaningId": "personal.name",
+          "recordId": null
+        },
+        "limited": {
+          "policy": "auto",
+          "meaningId": "personal.name",
+          "recordId": null
+        }
+      },
+      "optionsState": "complete",
+      "provenance": "diagnosis-derived-structure"
+    },
+    {
+      "id": "phone",
+      "label": "联系电话",
+      "groupLabel": "个人信息",
+      "kind": "text",
+      "name": "",
+      "placeholder": "联系电话",
+      "options": [],
+      "currentValue": "",
+      "expected": {
+        "complete": {
+          "policy": "auto",
+          "meaningId": "personal.phone",
+          "recordId": null
+        },
+        "limited": {
+          "policy": "missing",
+          "meaningId": "personal.phone",
+          "recordId": null
+        }
+      },
+      "optionsState": "complete",
+      "provenance": "diagnosis-derived-structure"
+    },
+    {
+      "id": "cities",
+      "label": "期望工作地点",
+      "groupLabel": "个人信息",
+      "kind": "combobox",
+      "name": "",
+      "placeholder": "期望工作地点",
+      "options": [
+        "上海",
+        "北京"
+      ],
+      "currentValue": "",
+      "expected": {
+        "complete": {
+          "policy": "auto",
+          "meaningId": "personal.preferredCities",
+          "recordId": null
+        },
+        "limited": {
+          "policy": "missing",
+          "meaningId": "personal.preferredCities",
+          "recordId": null
+        }
+      },
+      "optionsState": "unread",
+      "provenance": "diagnosis-derived-structure"
+    },
+    {
+      "id": "school",
+      "label": "学校",
+      "groupLabel": "本科教育经历",
+      "kind": "text",
+      "name": "",
+      "placeholder": "学校",
+      "options": [],
+      "currentValue": "",
+      "expected": {
+        "complete": {
+          "policy": "auto",
+          "meaningId": "education.school",
+          "recordId": "edu-bachelor"
+        },
+        "limited": {
+          "policy": "auto",
+          "meaningId": "education.school",
+          "recordId": "edu-bachelor"
+        }
+      },
+      "optionsState": "complete",
+      "provenance": "diagnosis-derived-structure"
+    },
+    {
+      "id": "start",
+      "label": "起止时间（开始）",
+      "groupLabel": "本科教育经历",
+      "kind": "text",
+      "name": "",
+      "placeholder": "起止时间（开始）",
+      "options": [],
+      "currentValue": "",
+      "expected": {
+        "complete": {
+          "policy": "auto",
+          "meaningId": "education.startDate",
+          "recordId": "edu-bachelor"
+        },
+        "limited": {
+          "policy": "auto",
+          "meaningId": "education.startDate",
+          "recordId": "edu-bachelor"
+        }
+      },
+      "optionsState": "complete",
+      "provenance": "diagnosis-derived-structure"
+    },
+    {
+      "id": "end",
+      "label": "起止时间（结束）",
+      "groupLabel": "本科教育经历",
+      "kind": "text",
+      "name": "",
+      "placeholder": "起止时间（结束）",
+      "options": [],
+      "currentValue": "",
+      "expected": {
+        "complete": {
+          "policy": "auto",
+          "meaningId": "education.endDate",
+          "recordId": "edu-bachelor"
+        },
+        "limited": {
+          "policy": "auto",
+          "meaningId": "education.endDate",
+          "recordId": "edu-bachelor"
+        }
+      },
+      "optionsState": "complete",
+      "provenance": "diagnosis-derived-structure"
+    },
+    {
+      "id": "emergency",
+      "label": "紧急联系人电话",
+      "groupLabel": "个人信息",
+      "kind": "text",
+      "name": "",
+      "placeholder": "紧急联系人电话",
+      "options": [],
+      "currentValue": "",
+      "expected": {
+        "complete": {
+          "policy": "missing",
+          "meaningId": null,
+          "recordId": null
+        },
+        "limited": {
+          "policy": "missing",
+          "meaningId": null,
+          "recordId": null
+        }
+      },
+      "optionsState": "complete",
+      "provenance": "synthetic-edge-case"
+    },
+    {
+      "id": "motivation",
+      "label": "为什么希望加入我们",
+      "groupLabel": "个人信息",
+      "kind": "text",
+      "name": "",
+      "placeholder": "为什么希望加入我们",
+      "options": [],
+      "currentValue": "",
+      "expected": {
+        "complete": {
+          "policy": "manual",
+          "meaningId": null,
+          "recordId": null
+        },
+        "limited": {
+          "policy": "manual",
+          "meaningId": null,
+          "recordId": null
+        }
+      },
+      "optionsState": "complete",
+      "provenance": "synthetic-edge-case"
+    }
+  ]
+}
