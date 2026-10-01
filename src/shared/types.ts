@@ -1,7 +1,7 @@
 import type { ControlExperience, AdditionalFact, FieldObservation, MeaningCorrection } from '../autofill/contracts.ts';
 import type { ControlOption } from './fillModel.ts';
 // 用户资料数据模型
-export interface UserProfile {
+export interface UserProfile extends SupplementalProfile {
   additionalFacts?: AdditionalFact[];
   personal: PersonalInfo;
   education: EducationInfo[];
@@ -21,6 +21,13 @@ export interface CustomInformation {
 }
 
 export interface PersonalInfo {
+  nationality?: string;
+  employmentStatus?: string;
+  desiredPosition?: string;
+  expectedSalary?: string;
+  availability?: string;
+  githubUrl?: string;
+  linkedinUrl?: string;
   age?: string;
   portfolioUrl?: string;
   preferredCities?: string;
@@ -85,6 +92,24 @@ export interface CertificationInfo {
   issuer: string;
   date: string;
   credentialId?: string;
+  expiryDate?: string;
+  description?: string;
+}
+
+export interface AwardInfo { id: string; name: string; issuer?: string; date?: string; level?: string; ranking?: string; description?: string }
+export interface PublicationInfo { id: string; title: string; authors?: string; venue?: string; date?: string; status?: string; doi?: string; url?: string; description?: string }
+export interface LanguageInfo { id: string; language: string; proficiency?: string; test?: string; score?: string; date?: string; description?: string }
+export interface PatentInfo { id: string; name: string; inventors?: string; patentNumber?: string; type?: string; status?: string; date?: string; description?: string }
+export interface ActivityInfo { id: string; organization: string; role?: string; startDate?: string; endDate?: string; description?: string; achievements?: string }
+export interface AdditionalInfo { id: string; name: string; content: string }
+/** Optional for compatibility with profiles and backups created before these sections existed. */
+export interface SupplementalProfile {
+  awards?: AwardInfo[];
+  publications?: PublicationInfo[];
+  languages?: LanguageInfo[];
+  patents?: PatentInfo[];
+  activities?: ActivityInfo[];
+  additionalInfo?: AdditionalInfo[];
 }
 
 export interface ResumeInfo {
@@ -95,12 +120,13 @@ export interface ResumeInfo {
   uploadDate: string;
 }
 
-export interface ResumeProfileSnapshot {
+export interface ResumeProfileSnapshot extends SupplementalProfile {
   personal: Partial<PersonalInfo>;
   education: EducationInfo[];
   experience: ExperienceInfo[];
   projects: ProjectInfo[];
   skills: string[];
+  certifications?: CertificationInfo[];
 }
 
 export interface ResumeVariant extends ResumeInfo {
@@ -334,7 +360,8 @@ export type Message =
   | { type: 'OPEN_PROFILE_SETTINGS'; payload?: null }
   | { type: 'GET_USER_PROFILE'; payload?: null }
   | { type: 'SAVE_USER_PROFILE'; payload: UserProfile }
-  | { type: 'PARSE_RESUME'; payload: { file: string; fileType: string; fileName: string; category?: string; rawText?: string } }
+  | { type: 'PARSE_RESUME'; payload: { file: string; fileType: string; fileName: string; category?: string; rawText?: string; requestId?: string } }
+  | { type: 'CANCEL_RESUME_IMPORT'; payload: { requestId: string } }
   | { type: 'FILL_FORM'; payload?: { reusePreview?: boolean; resumeId?: string | null } | null }
   | { type: 'PREVIEW_FILL'; payload?: { resumeId?: string | null } | null }
   | { type: 'UNDO_LAST_FILL'; payload?: null }
@@ -475,10 +502,20 @@ export enum FieldType {
 
 // 简历解析结果
 export interface ParsedResumeData {
+  /** Ambiguous research entries need an explicit review choice before becoming profile facts. */
+  publicationCandidates?: Partial<PublicationInfo>[];
+  parsingWarnings?: string[];
   personal?: Partial<PersonalInfo>;
   education?: Partial<EducationInfo>[];
   experience?: Partial<ExperienceInfo>[];
   projects?: Partial<ProjectInfo>[];
   skills?: string[];
+  certifications?: Partial<CertificationInfo>[];
+  awards?: Partial<AwardInfo>[];
+  publications?: Partial<PublicationInfo>[];
+  languages?: Partial<LanguageInfo>[];
+  patents?: Partial<PatentInfo>[];
+  activities?: Partial<ActivityInfo>[];
+  additionalInfo?: Partial<AdditionalInfo>[];
   rawText: string;
 }

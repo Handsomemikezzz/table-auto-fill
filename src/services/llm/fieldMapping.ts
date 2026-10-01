@@ -1,3 +1,5 @@
+import { PROFILE_RECORD_COLLECTIONS } from '../../shared/profileCollections.ts';
+import { PERSONAL_EXTRA_FIELDS } from '../../shared/personalFields.ts';
 import type { UserProfile } from '../../shared/types.ts';
 import type { ControlOption } from '../../shared/fillModel.ts';
 import { resolveOption } from '../../utils/optionResolver.ts';
@@ -17,7 +19,7 @@ export interface GroundedField {
 }
 export interface GroundedMapping { value: string; profilePath: string; optionId?: string }
 
-const PERSONAL_KEYS = new Set(['name', 'gender', 'birthDate', 'phone', 'email', 'wechat', 'idCard', 'politicalStatus', 'ethnicity', 'hometown', 'currentAddress', 'selfEvaluation']);
+const PERSONAL_KEYS = new Set(['name', 'gender', 'birthDate', 'phone', 'email', 'wechat', 'idCard', 'politicalStatus', 'ethnicity', 'hometown', 'currentAddress', 'selfEvaluation', ...PERSONAL_EXTRA_FIELDS.map(field => field.key)]);
 const RECORD_KEYS: Record<string, [string, string]> = {
   school: ['education', 'school'], college: ['education', 'college'], major: ['education', 'major'],
   majorCategory: ['education', 'majorCategory'], degree: ['education', 'degree'], academicDegree: ['education', 'academicDegree'],
@@ -41,7 +43,7 @@ function matchesKnownSemantic(semantic: string | undefined, path: string): boole
 
 export function readFact(profile: UserProfile, path: string): unknown {
   const normalized = path.replace(/\[(\d+)\]/g, '.$1');
-  if (!/^(?:personal|education|experience|projects|skills|certifications|customInformation)\.[\w.]+$/.test(normalized)) return undefined;
+  if (!new RegExp(`^(?:personal|skills|customInformation|${PROFILE_RECORD_COLLECTIONS.join('|')})\\.[\\w.]+$`).test(normalized)) return undefined;
   const parts = normalized.split('.');
   if (parts.some(part => ['__proto__', 'prototype', 'constructor', 'id', 'fileData'].includes(part))) return undefined;
   let current: unknown = profile;
@@ -84,7 +86,7 @@ export function validateFieldMappings(raw: unknown, fields: GroundedField[], pro
       if (entry.optionId && entry.optionId !== resolved.option.id) continue;
       mapping = { value: resolved.option.label, profilePath, ...(field.optionCandidates ? { optionId: resolved.option.id } : {}) };
     } else if (entry.optionId) continue;
-    const record = profilePath.match(/^(education|experience|projects)\.\d+/)?.[0];
+    const record = profilePath.match(new RegExp(`^(${PROFILE_RECORD_COLLECTIONS.join('|')})\\.\\d+`))?.[0];
     if (record && field.blockId) {
       const records = blockRecords.get(field.blockId) || new Set<string>();
       records.add(record);

@@ -1,3 +1,4 @@
+import { PROFILE_RECORD_COLLECTIONS } from './profileCollections.ts';
 import type { CustomInformation, LearnedFieldValue, PersonalInfo, UserProfile } from './types.ts';
 
 export type LearnedFieldStore = Record<string, Record<string, LearnedFieldValue>>;
@@ -135,11 +136,11 @@ export function resolveLearnedValue(entry: LearnedFieldValue | undefined, profil
   if (!entry) return '';
   if (!entry.profilePath) return entry.value;
   let path = entry.profilePath;
-  const collection = path.match(/^(education|experience|projects|customInformation|certifications)(?:\[(\d+)\]|\.(\d+))\.(.+)$/);
+  const collection = path.match(new RegExp(`^(${PROFILE_RECORD_COLLECTIONS.join('|')}|customInformation)(?:\\[(\\d+)\\]|\\.(\\d+))\\.(.+)$`));
   if (collection) {
     // Old index-only memories can point at a different record after reordering.
     if (!entry.profileRecordId) return '';
-    const records = profile[collection[1] as 'education' | 'experience' | 'projects' | 'customInformation' | 'certifications'];
+    const records = (profile as unknown as Record<string, { id: string }[]>)[collection[1]] || [];
     const index = records.findIndex(record => record.id === entry.profileRecordId);
     if (index < 0) return '';
     path = `${collection[1]}.${index}.${collection[4]}`;

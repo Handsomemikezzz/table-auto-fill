@@ -33,7 +33,7 @@ jobs:
       - name: 设置 Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22.12.0
+          node-version: 24.16.0
           cache: npm
 
       - name: 安装依赖
@@ -56,6 +56,11 @@ jobs:
         env:
           JOB_APPLYMATE_BROWSER_PATH: ${{ steps.form-fill-chrome.outputs.chrome-path }}
         run: npm run test:form-fill:browser
+
+      - name: 验证扫描简历 OCR 与预填写
+        env:
+          JOB_APPLYMATE_BROWSER_PATH: ${{ steps.form-fill-chrome.outputs.chrome-path }}
+        run: npm run test:resume-import:browser
 
       - name: 生成发布信息
         id: meta

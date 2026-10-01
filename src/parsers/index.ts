@@ -1,3 +1,4 @@
+import { parseResumeImage } from './ocrParser.ts';
 import { parsePDF } from './pdfParser.ts';
 import { parseDOCX } from './docxParser.ts';
 import { parseMarkdown } from './markdownParser.ts';
@@ -19,7 +20,7 @@ export function isStructuredType(fileType: string): boolean {
  *   一旦 bluebird 判定拿不到原生 Promise，就会走 document.createElement 分支
  *   并抛 ReferenceError。与其依赖该判定的结果，不如始终放到有 DOM 的上下文里跑。
  */
-const DOM_REQUIRED_TYPES = ['pdf', 'doc', 'docx'];
+const DOM_REQUIRED_TYPES = ['pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg', 'webp'];
 
 export async function parseResume(
   base64Data: string,
@@ -38,6 +39,11 @@ export async function parseResume(
   }
 
   switch (normalizedType) {
+    case 'png':
+    case 'jpg':
+    case 'jpeg':
+    case 'webp':
+      return (await parseResumeImage(base64Data)).text;
     case 'pdf':
       return await parsePDF(base64Data);
     case 'doc':
@@ -52,7 +58,7 @@ export async function parseResume(
       return await parseTXT(base64Data);
     default:
       throw new Error(
-        `不支持的文件格式：${fileType || '(未识别)'}。目前支持 PDF、DOC/DOCX、MD、TXT、JSON。`
+        `不支持的文件格式：${fileType || '(未识别)'}。目前支持 PDF、DOC/DOCX、图片、MD、TXT、JSON。`
       );
   }
 }
@@ -68,7 +74,7 @@ function canUseOffscreenDocument(): boolean {
 
 /** 在 offscreen document 中解析需要 DOM 的格式（用于 service worker 环境） */
 async function parseInOffscreen(base64Data: string, fileType: string): Promise<string> {
-  const parseDirectly = () => (fileType === 'pdf' ? parsePDF(base64Data) : parseDOCX(base64Data));
+  const parseDirectly = () => ['png', 'jpg', 'jpeg', 'webp'].includes(fileType) ? parseResumeImage(base64Data).then(result => result.text) : fileType === 'pdf' ? parsePDF(base64Data) : parseDOCX(base64Data);
 
   try {
     console.log(`Attempting to parse ${fileType} in offscreen document...`);
@@ -104,7 +110,7 @@ async function parseInOffscreen(base64Data: string, fileType: string): Promise<s
       payload: { fileData: base64Data, fileType }
     });
 
-    console.log('Received response from offscreen:', response);
+    console.log('Offscreen parsing finished:', Boolean(response?.success));
 
     if (!response?.success) {
       throw new Error(response?.error || `Failed to parse ${fileType}`);

@@ -1,3 +1,4 @@
+import { getProfileRecords, normalizeSupplementalRecords, SUPPLEMENTAL_COLLECTIONS } from './profileCollections.ts';
 import type {
   EducationInfo,
   ExperienceInfo,
@@ -98,6 +99,7 @@ function selectParsedSkillsOrFallback(parsedSkills: string[], fallbackSkills: st
 
 function normalizeResumeProfileSnapshot(snapshot: ResumeProfileSnapshot): ResumeProfileSnapshot {
   return {
+    ...normalizeSupplementalRecords(snapshot),
     personal: {
       ...snapshot.personal,
       ...(snapshot.personal.politicalStatus
@@ -147,6 +149,7 @@ function normalizeProject(
 
 export function createResumeProfileSnapshot(parsed: ParsedResumeData): ResumeProfileSnapshot {
   return normalizeResumeProfileSnapshot({
+    ...normalizeSupplementalRecords(parsed),
     personal: { ...(parsed.personal || {}) },
     education: (parsed.education || []).map(normalizeEducation),
     experience: (parsed.experience || []).map(normalizeExperience),
@@ -229,6 +232,7 @@ export function buildProfileForResume(
     experience: selectParsedRecordsOrFallback(selected.parsedProfile.experience, profile.experience),
     projects: selectParsedRecordsOrFallback(selected.parsedProfile.projects, profile.projects),
     skills: selectParsedSkillsOrFallback(selected.parsedProfile.skills, profile.skills),
+    ...Object.fromEntries(SUPPLEMENTAL_COLLECTIONS.map(collection => [collection, selectParsedRecordsOrFallback(getProfileRecords(selected.parsedProfile!, collection), getProfileRecords(profile, collection))])),
     resume: selected,
   };
 }

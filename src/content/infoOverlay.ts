@@ -1,6 +1,7 @@
 import type { UserProfile } from '../shared/types.ts';
 import { buildBasicInfoItems } from '../sidepanel/basicInfo.ts';
 import { isMissingInformationRecord } from '../shared/learnedFields.ts';
+import { getProfileRecords, PROFILE_RECORD_SECTIONS, SUPPLEMENTAL_COLLECTIONS } from '../shared/profileCollections.ts';
 
 const HOST_ID = 'job-applymate-info-overlay-host';
 const POSITION_KEY = 'jobApplyMateInfoOverlayPosition';
@@ -367,10 +368,21 @@ export function buildSections(profile: UserProfile): Section[] {
         ...recordFields('certifications', profile.certifications, [
           { key: 'name', label: '证书名称' }, { key: 'issuer', label: '颁发机构' },
           { key: 'date', label: '获得时间' }, { key: 'credentialId', label: '证书编号' },
+          { key: 'expiryDate', label: '有效期至' }, { key: 'description', label: '资格说明' },
         ], (record, index) => record.name || `证书 ${index + 1}`),
       ],
     },
   ];
+
+  for (const collection of SUPPLEMENTAL_COLLECTIONS.filter(key => key !== 'certifications')) {
+    const records = getProfileRecords(profile, collection);
+    if (!records.length) continue;
+    const section = PROFILE_RECORD_SECTIONS[collection];
+    sections.push({ title: section.label, groups: recordFields(collection, records,
+      Object.entries(section.fields).map(([key, label]) => ({ key, label })),
+      (record, index) => record[section.titleKey] || `${section.label} ${index + 1}`,
+    ) });
+  }
 
   if (missingInformation.length > 0) {
     sections.push({

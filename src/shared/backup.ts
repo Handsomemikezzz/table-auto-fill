@@ -1,3 +1,5 @@
+import { PERSONAL_EXTRA_FIELDS } from './personalFields.ts';
+import { PROFILE_RECORD_SECTIONS, SUPPLEMENTAL_COLLECTIONS } from './profileCollections.ts';
 import type {
   BackupData,
   BackupDocument,
@@ -55,9 +57,10 @@ function validateResumeProfileSnapshot(value: unknown): boolean {
   if (!hasOnlyStringFields(value.personal, [
     'name', 'gender', 'birthDate', 'phone', 'email', 'wechat', 'idCard',
     'politicalStatus', 'ethnicity', 'hometown', 'currentAddress', 'selfEvaluation',
-    'age', 'portfolioUrl', 'preferredCities', 'languageSkills',
+    ...PERSONAL_EXTRA_FIELDS.map(field => field.key),
   ])) return false;
   if (!validatePersonalFields(value.personal.additionalFields)) return false;
+  if (!SUPPLEMENTAL_COLLECTIONS.every(collection => validateOptionalObjectArray(value[collection], ['id', ...Object.keys(PROFILE_RECORD_SECTIONS[collection].fields)]))) return false;
   if (!validateObjectArray(value.education, [
     'id', 'school', 'college', 'educationType', 'major', 'majorCategory', 'degree', 'academicDegree',
     'startDate', 'endDate', 'gpa', 'ranking',
@@ -76,10 +79,11 @@ function validateUserProfile(value: unknown): value is UserProfile {
   if (!hasOnlyStringFields(value.personal, [
     'name', 'gender', 'birthDate', 'phone', 'email', 'wechat', 'idCard',
     'politicalStatus', 'ethnicity', 'hometown', 'currentAddress', 'selfEvaluation',
-    'age', 'portfolioUrl', 'preferredCities', 'languageSkills',
+    ...PERSONAL_EXTRA_FIELDS.map(field => field.key),
   ])) return false;
 
   if (!validatePersonalFields(value.personal.additionalFields)) return false;
+  if (!SUPPLEMENTAL_COLLECTIONS.every(collection => validateOptionalObjectArray(value[collection], ['id', ...Object.keys(PROFILE_RECORD_SECTIONS[collection].fields)]))) return false;
   if (!validateOptionalObjectArray(value.education, [
     'id', 'school', 'college', 'educationType', 'major', 'majorCategory', 'degree', 'academicDegree',
     'startDate', 'endDate', 'gpa', 'ranking',
@@ -93,9 +97,6 @@ function validateUserProfile(value: unknown): value is UserProfile {
   if (!validateOptionalObjectArray(value.additionalFacts, ['id', 'meaningId', 'label', 'subject', 'value', 'valueType', 'updatedAt'])) return false;
   if (Array.isArray(value.additionalFacts) && value.additionalFacts.some(fact => !['text', 'date'].includes(fact.valueType as string))) return false;
   if (!validateOptionalObjectArray(value.customInformation, ['id', 'name', 'content'])) return false;
-  if (!validateOptionalObjectArray(value.certifications, ['id', 'name', 'issuer', 'date', 'credentialId'])) {
-    return false;
-  }
   if (
     value.skills !== undefined &&
     (!Array.isArray(value.skills) || !value.skills.every(item => typeof item === 'string'))

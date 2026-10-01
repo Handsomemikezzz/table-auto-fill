@@ -6,6 +6,13 @@ export const PERSONAL_EXTRA_FIELDS = [
   { key: 'portfolioUrl', label: '作品链接', aliases: ['作品链接', '作品集链接', '个人作品链接', '作品集', '个人主页', 'portfolio', 'portfolio url', 'portfolioUrl', 'website'] },
   { key: 'preferredCities', label: '期望城市', aliases: ['期望城市', '期望工作城市', '期望工作地点', '意向城市', '意向工作城市', '求职意向城市', 'preferred cities', 'preferred city', 'preferredCities', 'desired location'] },
   { key: 'languageSkills', label: '语言能力', aliases: ['语言能力', '外语能力', '外语水平', '语言水平', 'language skills', 'languageSkills', 'language proficiency', 'languages'] },
+  { key: 'nationality', label: '国籍', aliases: ['国籍', 'nationality'] },
+  { key: 'employmentStatus', label: '求职 / 在职状态', aliases: ['求职状态', '在职状态', '目前状态', 'employment status', 'employmentStatus'] },
+  { key: 'desiredPosition', label: '意向岗位', aliases: ['意向岗位', '期望职位', '求职意向', 'desired position', 'desiredPosition'] },
+  { key: 'expectedSalary', label: '期望薪资', aliases: ['期望薪资', '期望薪酬', '薪资要求', 'expected salary', 'expectedSalary'] },
+  { key: 'availability', label: '可到岗时间', aliases: ['可到岗时间', '到岗时间', 'availability'] },
+  { key: 'githubUrl', label: 'GitHub 链接', aliases: ['GitHub', 'GitHub 链接', 'githubUrl'] },
+  { key: 'linkedinUrl', label: 'LinkedIn 链接', aliases: ['LinkedIn', '领英链接', 'linkedinUrl'] },
 ] as const;
 
 export function normalizePersonalFieldLabel(label: string): string {

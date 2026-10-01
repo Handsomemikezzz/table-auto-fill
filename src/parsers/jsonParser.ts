@@ -1,3 +1,6 @@
+import { normalizeParsedResume } from './resumeStructure.ts';
+import { PERSONAL_EXTRA_FIELDS } from '../shared/personalFields.ts';
+import { PROFILE_RECORD_SECTIONS, SUPPLEMENTAL_COLLECTIONS, normalizeSupplementalRecords } from '../shared/profileCollections.ts';
 import type { ParsedResumeData } from '../shared/types';
 
 /**
@@ -52,10 +55,14 @@ export function parseResumeJSON(jsonText: string): ParsedResumeData {
     throw new Error('JSON 格式有误，无法解析。请确认文件内容是合法的 JSON。');
   }
 
-  if (!data || typeof data !== 'object') {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
     throw new Error('JSON 内容不是有效的简历对象。');
   }
 
+  if (data.personal && typeof data.personal === 'object') {
+    return normalizeParsedResume(data, jsonText);
+  }
+  const supplemental = normalizeSupplementalRecords(data);
   const basic = data.basic ?? {};
   const status: string = basic.employementStatus ?? '';
 
@@ -74,6 +81,10 @@ export function parseResumeJSON(jsonText: string): ParsedResumeData {
     ),
   };
 
+  for (const field of PERSONAL_EXTRA_FIELDS) {
+    if (typeof basic[field.key] === 'string') personal[field.key] = basic[field.key].trim();
+  }
+
   // employementStatus 在该编辑器中常被用来填政治面貌
   if (POLITICAL_KEYWORDS.some(k => status.includes(k))) {
     personal.politicalStatus = status;
@@ -88,6 +99,11 @@ export function parseResumeJSON(jsonText: string): ParsedResumeData {
     else if (label.includes('籍贯')) personal.hometown = value;
     else if (label.includes('性别')) personal.gender = value;
     else if (label.includes('民族')) personal.ethnicity = value;
+    else {
+      const known = PERSONAL_EXTRA_FIELDS.find(field => field.aliases.some(alias => alias.toLowerCase() === label.trim().toLowerCase()));
+      if (known) personal[known.key] = value;
+      else (supplemental.additionalInfo ||= []).push({ id: crypto.randomUUID(), name: label || '补充资料', content: value });
+    }
   }
 
   // 注意：不按 visible 过滤。visible=false 只表示该条目在简历排版中被隐藏，
@@ -141,12 +157,13 @@ export function parseResumeJSON(jsonText: string): ParsedResumeData {
   const skills = parseSkills(data.skillContent || '');
 
   return {
+    ...supplemental,
     personal,
     education,
     experience,
     projects,
     skills,
-    rawText: buildRawText(data, personal, education, experience, projects, skills),
+    rawText: buildRawText(data, personal, education, experience, projects, skills) + SUPPLEMENTAL_COLLECTIONS.filter(collection => supplemental[collection]?.length).map(collection => `\n【${PROFILE_RECORD_SECTIONS[collection].label}】\n${supplemental[collection].map(record => Object.entries(record).filter(([key]) => key !== 'id').map(([, value]) => value).filter(Boolean).join(' · ')).join('\n')}`).join(''),
   };
 }
 

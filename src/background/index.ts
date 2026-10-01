@@ -1,3 +1,6 @@
+import { PROFILE_RECORD_COLLECTIONS, SUPPLEMENTAL_COLLECTIONS } from '../shared/profileCollections.ts';
+import { normalizeParsedResume } from '../parsers/resumeStructure.ts';
+import { recoverResumePublications } from '../parsers/researchPublications.ts';
 import { createProfileImportDraft } from '../autofill/profileImport.ts';
 import { bridgeFillPage } from './fillPageBridge.ts';
 import { beginFillSession, decideFillFields, endFillSession, getCorrections, changeCorrection, getExperiences, saveExperiences, changeExperience, isPageOrigin } from './fillSessions.ts';
@@ -127,8 +130,8 @@ async function handleSaveLearnedFieldValue(
 
   const store = (settings.learnedFieldValues || {}) as LearnedFieldStore;
   const profilePath = savedProfilePath || inferProfilePath(profile, entry.value);
-  const recordMatch = profilePath?.match(/^(education|experience|projects|customInformation|certifications)(?:\[(\d+)\]|\.(\d+))\./);
-  const recordCollection = recordMatch && profile?.[recordMatch[1] as 'education' | 'experience' | 'projects' | 'customInformation' | 'certifications'];
+  const recordMatch = profilePath?.match(new RegExp(`^(${PROFILE_RECORD_COLLECTIONS.join('|')}|customInformation)(?:\\[(\\d+)\\]|\\.(\\d+))\\.`));
+  const recordCollection = recordMatch && (profile as unknown as Record<string, { id: string }[]> | undefined)?.[recordMatch[1]];
   const profileRecordId = recordMatch && recordCollection ? recordCollection[Number(recordMatch[2] ?? recordMatch[3])]?.id : undefined;
   const nextStore = updateLearnedFieldStore(store, normalizedDomain, {
     signature: entry.signature,
@@ -324,13 +327,20 @@ export async function handleMessage(
     case 'SAVE_FIELD_RECOGNITION_HINT':
       return await handleSaveFieldRecognitionHint(message.payload);
 
+    case 'CANCEL_RESUME_IMPORT': {
+      const request = resumeImportRequests.get(message.payload.requestId);
+      if (request?.owner === importOwner(sender)) request.controller.abort();
+      return { success: true };
+    }
     case 'PARSE_RESUME':
       return await handleParseResume(
         message.payload.file,
         message.payload.fileType,
         message.payload.fileName,
         message.payload.category,
-        message.payload.rawText
+        message.payload.rawText,
+        message.payload.requestId,
+        sender
       );
 
     case 'GET_RESUME_DATA':
@@ -615,7 +625,7 @@ function getAIFillProfileFingerprint(profile: UserProfile): string {
     experience: profile.experience,
     projects: profile.projects,
     skills: profile.skills,
-    certifications: profile.certifications,
+    ...Object.fromEntries(SUPPLEMENTAL_COLLECTIONS.map(collection => [collection, profile[collection] || []])),
     customInformation: profile.customInformation,
   });
 }
@@ -668,17 +678,29 @@ async function handleSaveUserProfile(
   }
 }
 
+const resumeImportRequests = new Map<string, { controller: AbortController; owner: string }>();
+const importOwner = (sender: chrome.runtime.MessageSender) => `${sender.id}:${sender.url || ''}:${sender.tab?.id || ''}`;
 // 解析简历
 async function handleParseResume(
   fileData: string,
   fileType: string,
   fileName: string,
   category?: string,
-  preParsedText?: string
+  preParsedText?: string,
+  requestId?: string,
+  sender: chrome.runtime.MessageSender = {},
 ): Promise<MessageResponse> {
+  const requestController = new AbortController();
+  if (requestId) {
+    if (resumeImportRequests.has(requestId)) return { success: false, error: '这份简历正在识别中' };
+    resumeImportRequests.set(requestId, { controller: requestController, owner: importOwner(sender) });
+  }
+  const assertActive = () => { if (requestController.signal.aborted) throw new Error('已停止简历识别'); };
   try {
     const rawText = preParsedText ?? await parseResume(fileData, fileType);
 
+    assertActive();
+    if (!rawText.trim()) throw new Error('没有识别到文字，请上传更清晰的图片或可读取的简历');
     let parsedData: ParsedResumeData;
     let parseMethod: 'structured' | 'llm' | 'regex' = 'regex';
     let llmError: string | undefined;
@@ -691,6 +713,8 @@ async function handleParseResume(
       const llmConfig = await StorageService.getLLMConfig();
       if (llmConfig?.baseUrl?.trim() && llmConfig.model?.trim() && (llmConfig.apiKey || llmConfig.provider === 'custom')) {
         const controller = new AbortController();
+        const cancelModel = () => controller.abort();
+        requestController.signal.addEventListener('abort', cancelModel, { once: true });
         let timedOut = false;
         const timeoutId = setTimeout(() => {
           timedOut = true;
@@ -704,17 +728,22 @@ async function handleParseResume(
           llmError = timedOut
             ? 'AI 简历解析超过 45 秒，已自动停止并改用本地规则'
             : error instanceof Error ? error.message : String(error);
+          if (requestController.signal.aborted && !timedOut) throw new Error('已停止简历识别');
           console.warn('LLM resume parsing failed, falling back to regex:', error);
           parsedData = NLPHelper.parseResumeText(rawText);
         } finally {
           clearTimeout(timeoutId);
+          requestController.signal.removeEventListener('abort', cancelModel);
         }
       } else {
         parsedData = NLPHelper.parseResumeText(rawText);
       }
     }
 
+    assertActive();
+    if (parseMethod !== 'structured') parsedData = recoverResumePublications(parsedData, rawText);
     const currentProfile = await StorageService.getUserProfile();
+    assertActive();
 
     const resume = createResumeVariant({
       fileName,
@@ -744,6 +773,7 @@ async function handleParseResume(
       resumes: upsertResumeVariant(currentLibrary, resume),
     };
 
+    assertActive();
     const saved = await StorageService.saveUserProfile(updatedProfile);
     if (!saved) {
       return { success: false, error: '简历已解析，但保存个人信息失败' };
@@ -754,6 +784,7 @@ async function handleParseResume(
       success: true,
       data: {
         parsedData,
+        resumeId: resume.id,
         importDraft: createProfileImportDraft(baseProfile, parsedData),
         rawText,
         parseMethod,
@@ -766,7 +797,7 @@ async function handleParseResume(
       success: false,
       error: error instanceof Error ? error.message : 'Failed to parse resume'
     };
-  }
+  } finally { if (requestId) resumeImportRequests.delete(requestId); }
 }
 
 // 获取简历数据
@@ -804,22 +835,7 @@ async function parseResumeWithLLM(
     jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
   }
 
-  const parsed = JSON.parse(jsonStr);
-
-  return {
-    personal: parsed.personal,
-    education: (parsed.education || []).map((e: any, i: number) => ({
-      id: `edu-${i}`, ...e
-    })),
-    experience: (parsed.experience || []).map((e: any, i: number) => ({
-      id: `exp-${i}`, ...e
-    })),
-    projects: (parsed.projects || []).map((p: any, i: number) => ({
-      id: `proj-${i}`, ...p
-    })),
-    skills: parsed.skills || [],
-    rawText,
-  };
+  return normalizeParsedResume(JSON.parse(jsonStr), rawText);
 }
 
 // AI 生成开放性问题回答

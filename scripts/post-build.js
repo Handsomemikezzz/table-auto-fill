@@ -50,7 +50,7 @@ try {
   }
 
   // 复制 PDF.js worker 文件
-  const pdfWorkerSrc = join(projectRoot, 'node_modules', 'pdfjs-dist', 'build', 'pdf.worker.min.mjs');
+  const pdfWorkerSrc = join(projectRoot, 'node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.worker.min.mjs');
   const pdfWorkerDest = join(distDir, 'pdf.worker.min.js');
 
   if (existsSync(pdfWorkerSrc)) {
@@ -79,6 +79,18 @@ try {
     console.warn('⚠ PDF.js standard fonts not found, some PDF fonts may not work');
   }
 
+  // OCR runs entirely from packaged assets; no remote code or language downloads.
+  const ocrDir = join(distDir, 'ocr');
+  mkdirSync(join(ocrDir, 'core'), { recursive: true });
+  mkdirSync(join(ocrDir, 'lang'), { recursive: true });
+  copyFileSync(join(projectRoot, 'node_modules/tesseract.js/dist/worker.min.js'), join(ocrDir, 'worker.min.js'));
+  for (const file of readdirSync(join(projectRoot, 'node_modules/tesseract.js-core')).filter(file => /\.wasm(?:\.js)?$/.test(file))) {
+    copyFileSync(join(projectRoot, 'node_modules/tesseract.js-core', file), join(ocrDir, 'core', file));
+  }
+  for (const language of ['eng', 'chi_sim']) {
+    copyFileSync(join(projectRoot, 'node_modules/@tesseract.js-data', language, '4.0.0_best_int', `${language}.traineddata.gz`), join(ocrDir, 'lang', `${language}.traineddata.gz`));
+  }
+  console.log('✓ Local OCR worker, WASM and Chinese/English data copied');
   console.log('\n✅ 构建完成！可以加载 dist/ 目录到浏览器。');
 } catch (error) {
   console.error('构建后处理失败:', error);

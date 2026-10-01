@@ -1,3 +1,4 @@
+import { getProfileRecords, PROFILE_RECORD_SECTIONS, SUPPLEMENTAL_COLLECTIONS } from '../shared/profileCollections.ts';
 import React from 'react';
 import type {
   CustomInformation,
@@ -93,6 +94,15 @@ export function ProfileSections({
         onFieldClick={onFieldClick}
         getTitle={(record, index) => record.name || `项目经历 ${index + 1}`}
       />
+      {SUPPLEMENTAL_COLLECTIONS.map(collection => {
+        const section = PROFILE_RECORD_SECTIONS[collection], records = getProfileRecords(profile, collection);
+        return records.length > 0 && <RecordSection
+          key={collection} title={section.label} records={records}
+          fields={Object.entries(section.fields).map(([key, label]) => ({ key, label }))}
+          workingKey={workingKey} onFieldClick={onFieldClick}
+          getTitle={(record, index) => record[section.titleKey] || `${section.label} ${index + 1}`}
+        />;
+      })}
       {missingInformation.length > 0 && <CustomInformationSection
         title="缺失信息填补"
         records={missingInformation}

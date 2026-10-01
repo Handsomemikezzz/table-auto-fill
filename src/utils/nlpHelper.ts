@@ -17,6 +17,10 @@ export type SectionKind =
   | 'skills'
   | 'selfEvaluation'
   | 'award'
+  | 'publication'
+  | 'language'
+  | 'certification'
+  | 'patent'
   | 'other';
 
 export interface ResumeSection {
@@ -36,7 +40,11 @@ const SECTION_RULES: Array<[RegExp, SectionKind]> = [
   [/^(?:项目经历|项目经验|项目实践|科研经历|研究经历)$/, 'project'],
   [/^(?:实习经历|实习经验|工作经历|工作经验|职业经历|实践经历|工作履历)$/, 'experience'],
   [/^(?:校园经历|在校经历|校内经历|学生工作|社团经历|社会实践)$/, 'campus'],
-  [/^(?:获奖(?:情况|经历)?|荣誉奖项|奖励荣誉|证书|资格证书)$/, 'award'],
+  [/^(?:获奖(?:情况|经历)?|获奖与荣誉|获奖与论文|荣誉奖项|奖励荣誉|奖学金)$/, 'award'],
+  [/^(?:论文|论文与著作|发表论文|学术成果|研究成果|出版物)$/, 'publication'],
+  [/^(?:语言能力|外语能力|语言技能|外语水平)$/, 'language'],
+  [/^(?:证书|资格证书|证书与资格|职业资格)$/, 'certification'],
+  [/^(?:专利|专利成果|知识产权)$/, 'patent'],
   [/^(?:基本信息|个人信息|个人资料|联系方式)$/, 'basic'],
 ];
 
@@ -657,7 +665,10 @@ export class NLPHelper {
 
     if (skills.length === 0) skills = this.extractSkills(text);
 
+    // Without a model, keep original section text rather than guessing record details.
+    const additionalInfo = sections.filter(section => ['award', 'publication', 'language', 'certification', 'patent', 'campus'].includes(section.kind) && section.lines.length).map((section, index) => ({ id: `supplement-${index}`, name: section.title, content: section.lines.join('\n') }));
     return {
+      ...(additionalInfo.length ? { additionalInfo } : {}),
       personal: Object.keys(personal).length > 0 ? personal : undefined,
       education: education.length > 0 ? education : undefined,
       experience: experience.length > 0 ? experience : undefined,

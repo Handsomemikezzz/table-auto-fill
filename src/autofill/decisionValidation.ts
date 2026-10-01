@@ -1,3 +1,4 @@
+import { PROFILE_RECORD_COLLECTIONS } from '../shared/profileCollections.ts';
 import { RULE_PROVIDER_ID } from './ruleDecisions.ts';
 import { parseFlexibleDate, areEquivalentDates } from '../utils/dateValue.ts';
 import type { DecisionRequest, FieldDecision, FieldObservation, ProfileFact } from './contracts.ts';
@@ -45,7 +46,7 @@ export function validateModule(decisions: FieldDecision[], request: DecisionRequ
   for (const decision of decisions) {
     const field = request.fields.find(field => field.fieldId === decision.fieldId);
     const fact = request.profile.facts.find(fact => fact.id === decision.factId);
-    if (!field || !fact?.recordId || !/^(education|experience|projects|certifications)\./.test(fact.meaningId)) continue;
+    if (!field || !fact?.recordId || !PROFILE_RECORD_COLLECTIONS.includes(fact.meaningId.split('.')[0] as typeof PROFILE_RECORD_COLLECTIONS[number])) continue;
     const key = `${field.groupId}:${fact.meaningId.split('.')[0]}`;
     groups.set(key, [...(groups.get(key) || []), decision]);
   }

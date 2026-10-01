@@ -1,4 +1,16 @@
+import { createResumeOCR } from './ocrParser.ts';
+import { checkExtractionCancelled, needsPageOCR, type ExtractionOptions, type ResumeExtraction } from './resumeExtraction.ts';
 export async function parsePDF(base64Data: string): Promise<string> {
+  return (await extractResumePDF(base64Data)).text;
+}
+
+export async function extractResumePDF(base64Data: string, options: ExtractionOptions = {}): Promise<ResumeExtraction> {
+  let pdf: any;
+  let loadingTask: any;
+  let ocr: Awaited<ReturnType<typeof createResumeOCR>> | undefined;
+  let currentPage = 1;
+  const cancelLoading = () => { void loadingTask?.destroy(); };
+  options.signal?.addEventListener('abort', cancelLoading, { once: true });
   try {
     console.log('[PDF Parser] Starting PDF parsing...');
 
@@ -6,9 +18,7 @@ export async function parsePDF(base64Data: string): Promise<string> {
     const runtimeGetUrl = typeof chrome !== 'undefined' && chrome.runtime?.getURL
       ? chrome.runtime.getURL.bind(chrome.runtime)
       : null;
-    const pdfjsLib = hasDOM
-      ? await import('pdfjs-dist')
-      : await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
     console.log('[PDF Parser] PDF.js loaded, version:', pdfjsLib.version);
 
     // 在扩展环境且存在 DOM 时使用打包的 worker 文件
@@ -17,7 +27,7 @@ export async function parsePDF(base64Data: string): Promise<string> {
       console.log('[PDF Parser] Worker path set to:', pdfjsLib.GlobalWorkerOptions.workerSrc);
     } else if (hasDOM) {
       // 开发环境备用方案
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+      pdfjsLib.GlobalWorkerOptions.workerSrc = (await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')).default;
     } else {
       console.log('[PDF Parser] No DOM detected, parsing PDF without worker');
     }
@@ -56,29 +66,61 @@ export async function parsePDF(base64Data: string): Promise<string> {
       ...(standardFontDataUrl ? { standardFontDataUrl } : {}),
       ...(hasDOM ? {} : { disableWorker: true }),
     } as any;
-    const pdf = await pdfjsLib.getDocument(documentInit).promise;
+    loadingTask = pdfjsLib.getDocument(documentInit);
+    checkExtractionCancelled(options.signal);
+    pdf = await loadingTask.promise;
 
     console.log('[PDF Parser] PDF loaded, pages:', pdf.numPages);
 
-    let fullText = '';
-
-    // 遍历所有页面
+    if (pdf.numPages > 20) throw new Error('简历超过 20 页，请拆分后再识别');
+    const texts: string[] = [], warnings: string[] = [];
+    let ocrPages = 0;
     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      currentPage = pageNum;
+      checkExtractionCancelled(options.signal);
+      options.onProgress?.({ stage: 'reading', page: pageNum, totalPages: pdf.numPages });
       const page = await pdf.getPage(pageNum);
       const textContent = await page.getTextContent();
-
-      fullText += itemsToText(textContent.items) + '\n';
+      let text = itemsToText(textContent.items);
+      let hasImage = false;
+      if (text.replace(/\s/g, '').length < 160) {
+        const operators = await page.getOperatorList();
+        hasImage = operators.fnArray.some((code: number) => [pdfjsLib.OPS.paintImageXObject, pdfjsLib.OPS.paintInlineImageXObject].includes(code));
+      }
+      if (needsPageOCR(text, hasImage)) {
+        if (typeof document === 'undefined') throw new Error('扫描简历需要在插件页面或 offscreen 中识别');
+        checkExtractionCancelled(options.signal);
+        options.onProgress?.({ stage: 'ocr', page: pageNum, totalPages: pdf.numPages });
+        ocr ??= await createResumeOCR({ ...options, onProgress: progress => options.onProgress?.({ ...progress, page: currentPage, totalPages: pdf.numPages }) });
+        const viewport = page.getViewport({ scale: 2 });
+        const scale = Math.min(2, 2800 / Math.max(viewport.width / 2, viewport.height / 2));
+        const renderViewport = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.ceil(renderViewport.width); canvas.height = Math.ceil(renderViewport.height);
+        try {
+          // OCR also runs in hidden/offscreen pages, where display rendering can
+          // wait forever for requestAnimationFrame. Print intent does not use RAF.
+          await page.render({ canvas, canvasContext: canvas.getContext('2d')!, viewport: renderViewport, intent: 'print' }).promise;
+          const recognized = await ocr.recognize(canvas);
+          if (recognized.text) text = recognized.text;
+          if (recognized.confidence < 75) warnings.push(`第 ${pageNum} 页文字较模糊，请核对识别内容。`);
+          ocrPages++;
+        } finally { canvas.width = 0; canvas.height = 0; }
+      }
+      texts.push(text);
+      page.cleanup();
     }
-
-    return fullText.trim();
+    return { text: texts.join('\n\n').trim(), pages: pdf.numPages, ocrPages,
+      method: ocrPages === 0 ? 'text' : ocrPages === pdf.numPages ? 'ocr' : 'mixed', warnings };
   } catch (error) {
+    if (options.signal?.aborted || (error instanceof Error && error.name === 'AbortError')) throw new DOMException('已停止简历识别', 'AbortError');
     console.error('[PDF Parser] PDF parsing error:', error);
     // 返回详细的错误信息
     const errorMessage = error instanceof Error
       ? `${error.name}: ${error.message}\n${error.stack || ''}`
       : String(error);
     throw new Error(`Failed to parse PDF file: ${errorMessage}`);
-  }
+  } finally { options.signal?.removeEventListener('abort', cancelLoading); await ocr?.close(); await loadingTask?.destroy(); }
 }
 
 interface PDFTextItem {

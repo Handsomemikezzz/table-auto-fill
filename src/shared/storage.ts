@@ -1,3 +1,4 @@
+import { normalizeSupplementalRecords } from './profileCollections.ts';
 import { getPersonalAdditionalFields } from './personalFields.ts';
 import type {
   BackupData,
@@ -47,6 +48,7 @@ export function normalizeUserProfile(profile: UserProfile): UserProfile {
     projects: profile.projects || [],
     skills: profile.skills || [],
     certifications: profile.certifications || [],
+    ...normalizeSupplementalRecords(profile),
     resumes: normalizeResumeLibrary(profile),
   } as UserProfile;
 }

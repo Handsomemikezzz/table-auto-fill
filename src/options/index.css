@@ -1566,3 +1566,75 @@ textarea:focus {
     transition: none;
   }
 }
+
+/* Resume import: summary first, optional details, one confirmation action. */
+.resume-import-progress { max-width: 1120px; margin: 20px auto; padding: 20px 24px; background: var(--color-panel); border: 1px solid var(--color-border); border-radius: 16px; }
+.resume-import-steps { display: flex; gap: 18px; list-style: none; padding: 0; margin: 0 0 16px; flex-wrap: wrap; }
+.resume-import-steps li { display: flex; align-items: center; gap: 8px; color: var(--color-muted); font-size: 13px; }
+.resume-import-steps li > span { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--color-border); }
+.resume-import-steps .current { color: var(--color-primary); font-weight: 600; }
+.resume-import-steps .current > span, .resume-import-steps .done > span { background: var(--color-primary-soft); border-color: #93c5fd; }
+.resume-import-progress p { color: var(--color-text-secondary); margin: 8px 0; }
+.resume-import-progress progress { display: block; width: 100%; height: 7px; margin-top: 12px; accent-color: var(--color-primary); }
+.resume-import-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
+.resume-import-actions button, .resume-review button { cursor: pointer; min-height: 36px; }
+.resume-import-actions button { background: white; border: 1px solid var(--color-border); border-radius: 8px; padding: 8px 14px; }
+.resume-review { max-width: 920px; }
+.resume-review-header { display: flex; justify-content: space-between; gap: 20px; padding: 26px 28px 20px; border-bottom: 1px solid var(--color-border); }
+.resume-review-eyebrow { color: var(--color-primary); font-size: 13px; font-weight: 600; }
+.resume-review-header h2 { font-size: 24px; margin: 8px 0; letter-spacing: -0.02em; }
+.resume-review-header p { margin: 0; color: var(--color-muted); font-size: 13px; }
+.resume-review-header > button { align-self: start; background: transparent; border: 1px solid var(--color-border); border-radius: 8px; padding: 6px 12px; }
+.resume-review-content { padding: 22px 28px; background: #f8fafc; }
+.resume-review-intro { margin-top: 0; line-height: 1.7; color: var(--color-text-secondary); }
+.resume-review-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 18px 0; }
+.resume-review-stats > span { padding: 12px 16px; border: 1px solid var(--color-border); background: white; border-radius: 10px; color: var(--color-muted); font-size: 13px; }
+.resume-review-stats strong { display: block; color: var(--color-text); font-size: 23px; margin-bottom: 4px; }
+.resume-review-card { background: white; padding: 18px; margin: 14px 0; border: 1px solid var(--color-border); border-radius: 12px; }
+.resume-review-card h3 { font-size: 15px; margin: 0 0 14px; }
+.resume-review-card summary { cursor: pointer; min-height: 28px; font-weight: 600; font-size: 14px; }
+.resume-review-card summary span { color: var(--color-muted); font-weight: 400; font-size: 12px; margin-left: 12px; }
+.resume-review-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; margin-top: 14px; }
+.resume-review-field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.resume-review-field > span { display: flex; justify-content: space-between; font-size: 13px; color: var(--color-text-secondary); }
+.resume-review-field small { color: #166534; font-size: 11px; }
+.resume-review-field input, .resume-review-field textarea { width: 100%; min-height: 40px; padding: 9px 11px; border: 1px solid var(--color-border); border-radius: 7px; color: var(--color-text); background: #fff; }
+.resume-review-field textarea { resize: vertical; line-height: 1.6; }
+.resume-review-warning { padding: 12px 14px; color: #854d0e; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; font-size: 13px; line-height: 1.6; }
+.resume-review-conflict { font-size: 12px; color: #854d0e; }
+.resume-review-conflict > span { display: block; margin: 5px 0; overflow-wrap: anywhere; }
+.resume-review-conflict button, .resume-review-record > button { background: transparent; border: 1px solid var(--color-border); border-radius: 6px; padding: 5px 8px; margin: 4px 6px 0 0; font-size: 12px; }
+.resume-review-record { border-top: 1px solid var(--color-border); padding: 12px 0; }
+.resume-review-record summary { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.resume-review-record summary strong { min-width: 0; overflow-wrap: anywhere; }
+.resume-review-record summary span { overflow-wrap: anywhere; }
+.resume-review-record > summary::after { content: '展开'; color: var(--color-muted); font-size: 12px; font-weight: 400; }
+.resume-review-record[open] > summary::after { content: '收起'; }
+.supplemental-profile { max-width: 100%; }
+.supplemental-profile > h2 { font-size: 20px; margin: 0 0 12px; }
+.supplemental-profile .btn-secondary { min-height: 40px; margin-top: 12px; }
+.supplemental-profile .supplemental-remove { color: #b91c1c; min-height: 36px; }
+.supplemental-profile summary:focus-visible, .resume-review-card summary:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 4px; border-radius: 4px; }
+.resume-review-empty { color: var(--color-muted); font-size: 13px; margin: 0; }
+.resume-review-source { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow-y: auto; line-height: 1.7; font: inherit; font-size: 12px; }
+.resume-review-publication-candidates { margin-top: 14px; padding: 12px; border-radius: 8px; background: #eff6ff; font-size: 13px; line-height: 1.6; }
+.resume-review-publication-candidates strong { overflow-wrap: anywhere; }
+.resume-review-publication-candidates p { margin: 6px 0; }
+.resume-review .import-review-footer { gap: 12px; }
+.resume-review .import-review-footer > span { color: var(--color-muted); font-size: 12px; }
+@media (max-width: 640px) {
+  .import-review-overlay { padding: 10px; }
+  .resume-review-header { padding: 20px; }
+  .resume-review-content { padding: 14px; }
+  .resume-review-grid { grid-template-columns: 1fr; }
+  .resume-review-stats { grid-template-columns: repeat(2,1fr); }
+  .resume-review .import-review-footer { flex-direction: column; align-items: stretch; }
+  .resume-review .import-footer-actions { display: flex; }
+  .resume-review .import-footer-actions button { flex: 1; }
+  .resume-import-progress { margin: 12px; padding: 16px; }
+}
+@media (prefers-reduced-motion: reduce) { .resume-review *, .resume-import-progress * { transition: none !important; animation: none !important; } }
+
+.resume-review-header > div { min-width: 0; }
+.resume-review-header p { overflow-wrap: anywhere; }
+.resume-review-warning button { display: block; margin-top: 10px; padding: 8px 12px; border: 1px solid #facc15; border-radius: 8px; background: white; color: #854d0e; }

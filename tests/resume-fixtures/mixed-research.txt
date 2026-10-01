@@ -1,0 +1,15 @@
+项目研究 Project
+• 2026 VINCI 2026 Art Paper Track Decision《CosmoSonic: Resonating with the Void - A Multimodal Embodied Interaction System 2026.09
+Based on Real-Time Cosmological Data Mapping》
+• 2026 ICME《COSMIC SONIC》——CCF B人机交互科普Vibecoding系统 二作主导宇宙磁场理论的科普可视化与人体交互 Vibecoding系统设计
+2026.08
+• 2026 ACM SIGGRAPH-DAC-UrbanDigital《COSMIC SONIC》——AIGC设计展览 二作/Google AIstudio 宇宙理论科普可视化系统
+2026.07
+• 2026 CSCWD《SavorLink: Designing a Collaborative and Multimodal Dietary Management System for Rural Elderly》——膳食系统UX2026.02
+交互体验设计 二作/围绕乡村老年用户需求打造多模态膳食管理产品，落地产品交互原型与用户体验验证
+• 2026Cumulus Athens 2026 Roots|Routes in Design《Product Service System Design and Service Design in the Martian Semantic 2025.12
+Environment: Collaborative Innovation between logistics and emotional feedback》——服务体验设计/情感反馈创新 二作
+• IEEE-HRI《DozeBuddy》最佳SDC提名——人机交互机器人 一作/主导人机系统联动交互产品设计与 Arduino 嵌入式开发
+2025.03
+https://dl.acm.org/doi/10.5555/3721488.3721821
+• 2025 ICHEC LBW paper《GUAN·ZIZAI·WEILAI》——人机交互/多媒体宗教疗愈系统设计 二作/Blender&TouchDesigner设计开发

@@ -22,6 +22,15 @@ const profile: UserProfile = {
   certifications: [],
 };
 
+test('扩充资料在侧栏显示可填写内容，空类别不占位置', () => {
+  const html = renderToStaticMarkup(React.createElement(ProfileSections, {
+    profile: { ...profile, awards: [{ id: 'a', name: '国家奖学金' }], publications: [{ id: 'p', title: '示例论文', status: '已录用' }], languages: [{ id: 'l', language: '英语', test: 'CET-6', score: '580' }] },
+    workingKey: null, onFieldClick: () => {},
+  }));
+  for (const text of ['获奖与荣誉', '国家奖学金', '论文与著作', '已录用', '语言能力', 'CET-6', '580']) assert(html.includes(text), text);
+  assert(!html.includes('专利与知识产权'));
+});
+
 test('ProfileSections 把基本信息排在教育经历之前', () => {
   const html = renderToStaticMarkup(
     React.createElement(ProfileSections, {
