@@ -8,7 +8,6 @@ import type {
   BackupParseResult,
   BackupSummary,
   UserProfile,
-  WebDAVConfig,
 } from './types';
 import type { LLMConfig } from '../services/llm/types';
 import { normalizeUserProfile } from './storage.ts';
@@ -128,13 +127,6 @@ function validateUserProfile(value: unknown): value is UserProfile {
   return true;
 }
 
-function validateWebDAVConfig(value: unknown): value is WebDAVConfig {
-  if (!isPlainObject(value)) return false;
-  if (typeof value.enabled !== 'boolean') return false;
-  if (!hasOnlyStringFields(value, ['serverUrl', 'username', 'password'])) return false;
-  return ['serverUrl', 'username', 'password'].every(field => typeof value[field] === 'string');
-}
-
 function validateLLMConfig(value: unknown): value is LLMConfig {
   if (!isPlainObject(value)) return false;
   if (!hasOnlyStringFields(value, ['provider', 'apiKey', 'baseUrl', 'model'])) return false;
@@ -174,15 +166,6 @@ function validateV1(value: PlainObject): BackupParseResult {
     return failure('INVALID_DATA', '旧版兼容数据结构无效');
   }
 
-  // webdavConfig 仅出现在本地导出文件中；WebDAV 同步的文档不含此字段。
-  if (
-    value.webdavConfig !== undefined &&
-    value.webdavConfig !== null &&
-    !validateWebDAVConfig(value.webdavConfig)
-  ) {
-    return failure('INVALID_WEBDAV_CONFIG', 'WebDAV 同步设置结构无效');
-  }
-
   const document: BackupDocumentV1 = {
     schemaVersion: 1,
     exportedAt: value.exportedAt,
@@ -196,9 +179,6 @@ function validateV1(value: PlainObject): BackupParseResult {
   if (applicationRecords !== undefined) {
     document.data.applicationRecords = (applicationRecords as Record<string, unknown>[] | null) ?? null;
   }
-  if (value.webdavConfig !== undefined) {
-    document.webdavConfig = (value.webdavConfig as WebDAVConfig | null) ?? null;
-  }
   return { success: true, document };
 }
 
@@ -206,7 +186,6 @@ export function createBackupDocument(
   data: BackupData,
   extensionVersion: string,
   exportedAt = new Date().toISOString(),
-  webdavConfig?: WebDAVConfig | null,
 ): BackupDocumentV1 {
   const document: BackupDocumentV1 = {
     schemaVersion: BACKUP_SCHEMA_VERSION,
@@ -219,8 +198,6 @@ export function createBackupDocument(
       applicationRecords: data.applicationRecords ?? [],
     },
   };
-  // 只有本地导出会显式传入 webdavConfig；同步上传不带凭据，避免密码落到远端。
-  if (webdavConfig !== undefined) document.webdavConfig = webdavConfig;
   return document;
 }
 
@@ -281,6 +258,5 @@ export function createBackupSummary(document: BackupDocument): BackupSummary {
     ),
     hasLLMConfig: document.data.llmConfig !== null,
     hasApiKey: Boolean(document.data.llmConfig?.apiKey),
-    hasWebDAVConfig: Boolean(document.webdavConfig?.serverUrl),
   };
 }

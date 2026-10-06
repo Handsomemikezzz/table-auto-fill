@@ -167,7 +167,6 @@ export interface BackupDocumentV1 {
     extensionVersion: string;
   };
   data: BackupData;
-  webdavConfig?: WebDAVConfig | null;
 }
 
 export type BackupDocument = BackupDocumentV1;
@@ -185,8 +184,7 @@ export type BackupErrorCode =
   | 'INVALID_DATA'
   | 'INVALID_USER_PROFILE'
   | 'INVALID_LLM_CONFIG'
-  | 'INVALID_SETTINGS'
-  | 'INVALID_WEBDAV_CONFIG';
+  | 'INVALID_SETTINGS';
 
 export interface BackupParseError {
   code: BackupErrorCode;
@@ -205,44 +203,10 @@ export interface BackupSummary {
   hasResumeFile: boolean;
   hasLLMConfig: boolean;
   hasApiKey: boolean;
-  hasWebDAVConfig: boolean;
 }
-
-export interface WebDAVConfig {
-  enabled: boolean;
-  serverUrl: string;
-  username: string;
-  password: string;
-}
-
-export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'conflict' | 'error';
-
-export interface SyncConflictSummary {
-  local: BackupSummary;
-  remote: BackupSummary;
-}
-
-export interface SyncMetadata {
-  etag?: string;
-  lastSyncedHash?: string;
-  lastSyncedAt?: string;
-  status: SyncStatus;
-  lastError?: string;
-  conflict?: SyncConflictSummary;
-}
-
-export type SyncAction =
-  | 'create-remote'
-  | 'no-change'
-  | 'upload-local'
-  | 'download-remote'
-  | 'conflict';
-
-export type SyncResultStatus = 'disabled' | 'synced' | 'queued' | 'conflict' | 'error';
 
 export interface LocalSaveResult {
   localSaved: true;
-  sync: SyncResultStatus;
 }
 
 export type FocusedFieldFailureReason =
@@ -427,15 +391,7 @@ export type Message =
   | { type: 'TEST_LLM_CONNECTION'; payload?: LLMConfig | null }
   | { type: 'EXPORT_BACKUP'; payload?: null }
   | { type: 'PREVIEW_BACKUP_IMPORT'; payload: { json: string } }
-  | { type: 'IMPORT_BACKUP'; payload: { json: string } }
-  | { type: 'GET_WEBDAV_CONFIG'; payload?: null }
-  | { type: 'SAVE_WEBDAV_CONFIG'; payload: WebDAVConfig }
-  | { type: 'TEST_WEBDAV'; payload: WebDAVConfig }
-  | { type: 'GET_SYNC_STATUS'; payload?: null }
-  | { type: 'SYNC_NOW'; payload?: null }
-  | { type: 'FORCE_UPLOAD_LOCAL'; payload?: null }
-  | { type: 'FORCE_DOWNLOAD_REMOTE'; payload?: null }
-  | { type: 'RESOLVE_SYNC_CONFLICT'; payload: { choice: 'local' | 'remote' } };
+  | { type: 'IMPORT_BACKUP'; payload: { json: string } };
 
 export interface MessageResponse<T = any> {
   success: boolean;

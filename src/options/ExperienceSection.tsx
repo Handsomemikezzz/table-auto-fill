@@ -59,7 +59,7 @@ export function ExperienceSection({
       </p>
 
       {experience.length === 0 && (
-        <div style={styles.empty}>还没有实习经历，点击下方按钮添加，或在「简历上传」中导入。</div>
+        <div style={styles.empty}>还没有实习经历，点击下方按钮添加，或从已有简历中提取。</div>
       )}
 
       {experience.map((item, index) => (
@@ -80,10 +80,10 @@ export function ExperienceSection({
             </div>
           </div>
 
-          <div style={styles.row}>
+          <div className="record-editor-row" style={styles.row}>
             <div style={styles.group}>
-              <label style={styles.label}>公司 / 机构</label>
-              <input
+              <label style={styles.label} htmlFor={`experience-${item.id || index}-company`}>公司 / 机构</label>
+              <input id={`experience-${item.id || index}-company`}
                 type="text"
                 value={item.company || ''}
                 onChange={e => updateExp(index, 'company', e.target.value)}
@@ -92,8 +92,8 @@ export function ExperienceSection({
               />
             </div>
             <div style={styles.group}>
-              <label style={styles.label}>岗位</label>
-              <input
+              <label style={styles.label} htmlFor={`experience-${item.id || index}-position`}>岗位</label>
+              <input id={`experience-${item.id || index}-position`}
                 type="text"
                 value={item.position || ''}
                 onChange={e => updateExp(index, 'position', e.target.value)}
@@ -103,10 +103,10 @@ export function ExperienceSection({
             </div>
           </div>
 
-          <div style={styles.row}>
+          <div className="record-editor-row" style={styles.row}>
             <div style={styles.group}>
-              <label style={styles.label}>开始时间</label>
-              <input
+              <label style={styles.label} htmlFor={`experience-${item.id || index}-startDate`}>开始时间</label>
+              <input id={`experience-${item.id || index}-startDate`}
                 type="text"
                 value={item.startDate || ''}
                 onChange={e => updateExp(index, 'startDate', e.target.value)}
@@ -115,8 +115,8 @@ export function ExperienceSection({
               />
             </div>
             <div style={styles.group}>
-              <label style={styles.label}>结束时间</label>
-              <input
+              <label style={styles.label} htmlFor={`experience-${item.id || index}-endDate`}>结束时间</label>
+              <input id={`experience-${item.id || index}-endDate`}
                 type="text"
                 value={item.endDate || ''}
                 onChange={e => updateExp(index, 'endDate', e.target.value)}
@@ -127,8 +127,8 @@ export function ExperienceSection({
           </div>
 
           <div style={styles.group}>
-            <label style={styles.label}>工作内容</label>
-            <textarea
+            <label style={styles.label} htmlFor={`experience-${item.id || index}-description`}>工作内容</label>
+            <textarea id={`experience-${item.id || index}-description`}
               value={item.description || ''}
               onChange={e => updateExp(index, 'description', e.target.value)}
               style={{ ...styles.textarea, minHeight: '120px' }}
@@ -182,10 +182,10 @@ export function ExperienceSection({
             </div>
           </div>
 
-          <div style={styles.row}>
+          <div className="record-editor-row" style={styles.row}>
             <div style={styles.group}>
-              <label style={styles.label}>项目名称</label>
-              <input
+              <label style={styles.label} htmlFor={`projects-${item.id || index}-name`}>项目名称</label>
+              <input id={`projects-${item.id || index}-name`}
                 type="text"
                 value={item.name || ''}
                 onChange={e => updateProj(index, 'name', e.target.value)}
@@ -194,8 +194,8 @@ export function ExperienceSection({
               />
             </div>
             <div style={styles.group}>
-              <label style={styles.label}>担任角色</label>
-              <input
+              <label style={styles.label} htmlFor={`projects-${item.id || index}-role`}>担任角色</label>
+              <input id={`projects-${item.id || index}-role`}
                 type="text"
                 value={item.role || ''}
                 onChange={e => updateProj(index, 'role', e.target.value)}
@@ -205,10 +205,10 @@ export function ExperienceSection({
             </div>
           </div>
 
-          <div style={styles.row}>
+          <div className="record-editor-row" style={styles.row}>
             <div style={styles.group}>
-              <label style={styles.label}>开始时间</label>
-              <input
+              <label style={styles.label} htmlFor={`projects-${item.id || index}-startDate`}>开始时间</label>
+              <input id={`projects-${item.id || index}-startDate`}
                 type="text"
                 value={item.startDate || ''}
                 onChange={e => updateProj(index, 'startDate', e.target.value)}
@@ -217,8 +217,8 @@ export function ExperienceSection({
               />
             </div>
             <div style={styles.group}>
-              <label style={styles.label}>结束时间</label>
-              <input
+              <label style={styles.label} htmlFor={`projects-${item.id || index}-endDate`}>结束时间</label>
+              <input id={`projects-${item.id || index}-endDate`}
                 type="text"
                 value={item.endDate || ''}
                 onChange={e => updateProj(index, 'endDate', e.target.value)}
@@ -229,8 +229,8 @@ export function ExperienceSection({
           </div>
 
           <div style={styles.group}>
-            <label style={styles.label}>项目描述</label>
-            <textarea
+            <label style={styles.label} htmlFor={`projects-${item.id || index}-description`}>项目描述</label>
+            <textarea id={`projects-${item.id || index}-description`}
               value={item.description || ''}
               onChange={e => updateProj(index, 'description', e.target.value)}
               style={{ ...styles.textarea, minHeight: '100px' }}
@@ -263,6 +263,7 @@ export function ExperienceSection({
       <h2 style={{ ...styles.sectionTitle, marginTop: '36px' }}>专业技能</h2>
       <p style={styles.description}>每行一条，填充技能类字段时会合并为一段文本。</p>
       <textarea
+        aria-label="专业技能"
         value={skills.join('\n')}
         onChange={e => onChangeSkills(e.target.value.split('\n').map(s => s.trim()).filter(Boolean))}
         style={{ ...styles.textarea, minHeight: '140px' }}

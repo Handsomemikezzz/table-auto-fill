@@ -3,12 +3,9 @@ import { getPersonalAdditionalFields } from './personalFields.ts';
 import type {
   BackupData,
   SettingsData,
-  SyncMetadata,
   UserProfile,
-  WebDAVConfig,
 } from './types';
 import type { LLMConfig } from '../services/llm/types';
-import { normalizeWebDAVServerUrl } from '../services/webdav.ts';
 import { normalizeResumeLibrary } from './resumes.ts';
 import { normalizeBirthDateValue, normalizePoliticalStatusValue } from './personal.ts';
 
@@ -16,8 +13,6 @@ export const STORAGE_KEYS = {
   USER_PROFILE: 'userProfile',
   SETTINGS: 'settings',
   LLM_CONFIG: 'llmConfig',
-  WEBDAV_CONFIG: 'webdavConfig',
-  SYNC_METADATA: 'syncMetadata',
   // Keep the retired key for non-destructive legacy backup compatibility.
   LEGACY_APPLICATION_RECORDS: 'applicationRecords',
 } as const;
@@ -179,7 +174,7 @@ export class StorageService {
     };
   }
 
-  static async replaceBusinessData(data: BackupData, webdavConfig?: WebDAVConfig | null): Promise<void> {
+  static async replaceBusinessData(data: BackupData): Promise<void> {
     const values: Record<string, unknown> = {};
     const removals: string[] = [];
     const entries = [
@@ -198,49 +193,7 @@ export class StorageService {
       else values[STORAGE_KEYS.LEGACY_APPLICATION_RECORDS] = data.applicationRecords;
     }
 
-    // webdavConfig 仅在本地导入时恢复，同步下载不会覆盖本地凭据。
-    if (webdavConfig !== undefined) {
-      if (webdavConfig === null) removals.push(STORAGE_KEYS.WEBDAV_CONFIG);
-      else values[STORAGE_KEYS.WEBDAV_CONFIG] = webdavConfig;
-    }
-
     if (Object.keys(values).length > 0) await chrome.storage.local.set(values);
     if (removals.length > 0) await chrome.storage.local.remove(removals);
   }
-
-  static async getWebDAVConfig(): Promise<WebDAVConfig | null> {
-    const result = await chrome.storage.local.get(STORAGE_KEYS.WEBDAV_CONFIG);
-    const stored = result[STORAGE_KEYS.WEBDAV_CONFIG] as
-      | WebDAVConfig
-      | { enabled: boolean; fileUrl?: string; username: string; password: string }
-      | undefined;
-    if (!stored) return null;
-
-    const rawUrl = 'serverUrl' in stored ? stored.serverUrl : stored.fileUrl;
-    if (!rawUrl) return { ...stored, serverUrl: '' };
-    return {
-      enabled: stored.enabled,
-      serverUrl: normalizeWebDAVServerUrl(rawUrl),
-      username: stored.username,
-      password: stored.password,
-    };
-  }
-
-  static async saveWebDAVConfig(config: WebDAVConfig): Promise<void> {
-    await chrome.storage.local.set({ [STORAGE_KEYS.WEBDAV_CONFIG]: config });
-  }
-
-  static async getSyncMetadata(): Promise<SyncMetadata> {
-    const result = await chrome.storage.local.get(STORAGE_KEYS.SYNC_METADATA);
-    return (result[STORAGE_KEYS.SYNC_METADATA] as SyncMetadata) || { status: 'idle' };
-  }
-
-  static async saveSyncMetadata(metadata: SyncMetadata): Promise<void> {
-    await chrome.storage.local.set({ [STORAGE_KEYS.SYNC_METADATA]: metadata });
-  }
-
-  static async applyRemoteBusinessData(data: BackupData): Promise<void> {
-    await this.replaceBusinessData(data);
-  }
-
 }

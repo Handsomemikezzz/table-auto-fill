@@ -1,3 +1,4 @@
+import React from 'react';
 import type { EducationInfo } from '../shared/types';
 import { sectionStyles as styles } from './sectionStyles';
 
@@ -57,7 +58,7 @@ export function EducationSection({ items, onChange }: Props) {
       </p>
 
       {items.length === 0 && (
-        <div style={styles.empty}>还没有教育经历，点击下方按钮添加，或在「简历上传」中导入。</div>
+        <div style={styles.empty}>还没有教育经历，点击下方按钮添加，或从已有简历中提取。</div>
       )}
 
       {items.map((item, index) => (
@@ -73,10 +74,10 @@ export function EducationSection({ items, onChange }: Props) {
             </div>
           </div>
 
-          <div style={styles.row}>
+          <div className="record-editor-row" style={styles.row}>
             <div style={styles.group}>
-              <label style={styles.label}>学校</label>
-              <input
+              <label style={styles.label} htmlFor={`education-${item.id || index}-school`}>学校</label>
+              <input id={`education-${item.id || index}-school`}
                 type="text"
                 value={item.school || ''}
                 onChange={e => update(index, 'school', e.target.value)}
@@ -85,8 +86,8 @@ export function EducationSection({ items, onChange }: Props) {
               />
             </div>
             <div style={styles.group}>
-              <label style={styles.label}>学院</label>
-              <input
+              <label style={styles.label} htmlFor={`education-${item.id || index}-college`}>学院</label>
+              <input id={`education-${item.id || index}-college`}
                 type="text"
                 value={item.college || ''}
                 onChange={e => update(index, 'college', e.target.value)}
@@ -95,8 +96,8 @@ export function EducationSection({ items, onChange }: Props) {
               />
             </div>
             <div style={styles.group}>
-              <label style={styles.label}>专业</label>
-              <input
+              <label style={styles.label} htmlFor={`education-${item.id || index}-major`}>专业</label>
+              <input id={`education-${item.id || index}-major`}
                 type="text"
                 value={item.major || ''}
                 onChange={e => update(index, 'major', e.target.value)}
@@ -105,8 +106,8 @@ export function EducationSection({ items, onChange }: Props) {
               />
             </div>
             <div style={styles.group}>
-              <label style={styles.label}>专业类别 / 一级学科</label>
-              <input
+              <label style={styles.label} htmlFor={`education-${item.id || index}-majorCategory`}>专业类别 / 一级学科</label>
+              <input id={`education-${item.id || index}-majorCategory`}
                 type="text"
                 value={item.majorCategory || ''}
                 onChange={e => update(index, 'majorCategory', e.target.value)}
@@ -116,10 +117,10 @@ export function EducationSection({ items, onChange }: Props) {
             </div>
           </div>
 
-          <div style={styles.row}>
+          <div className="record-editor-row" style={styles.row}>
             <div style={styles.group}>
-              <label style={styles.label}>学习形式 / 培养方式</label>
-              <select
+              <label style={styles.label} htmlFor={`education-${item.id || index}-educationType`}>学习形式 / 培养方式</label>
+              <select id={`education-${item.id || index}-educationType`}
                 value={item.educationType || ''}
                 onChange={e => update(index, 'educationType', e.target.value)}
                 style={styles.input}
@@ -133,8 +134,8 @@ export function EducationSection({ items, onChange }: Props) {
               </select>
             </div>
             <div style={styles.group}>
-              <label style={styles.label}>学历层次</label>
-              <select
+              <label style={styles.label} htmlFor={`education-${item.id || index}-degree`}>学历层次</label>
+              <select id={`education-${item.id || index}-degree`}
                 value={item.degree || ''}
                 onChange={e => update(index, 'degree', e.target.value)}
                 style={styles.input}
@@ -144,8 +145,8 @@ export function EducationSection({ items, onChange }: Props) {
               </select>
             </div>
             <div style={styles.group}>
-              <label style={styles.label}>学位</label>
-              <input
+              <label style={styles.label} htmlFor={`education-${item.id || index}-academicDegree`}>学位</label>
+              <input id={`education-${item.id || index}-academicDegree`}
                 type="text"
                 value={item.academicDegree || ''}
                 onChange={e => update(index, 'academicDegree', e.target.value)}
@@ -154,8 +155,8 @@ export function EducationSection({ items, onChange }: Props) {
               />
             </div>
             <div style={styles.group}>
-              <label style={styles.label}>入学时间</label>
-              <input
+              <label style={styles.label} htmlFor={`education-${item.id || index}-startDate`}>入学时间</label>
+              <input id={`education-${item.id || index}-startDate`}
                 type="text"
                 value={item.startDate || ''}
                 onChange={e => update(index, 'startDate', e.target.value)}
@@ -164,8 +165,8 @@ export function EducationSection({ items, onChange }: Props) {
               />
             </div>
             <div style={styles.group}>
-              <label style={styles.label}>毕业时间</label>
-              <input
+              <label style={styles.label} htmlFor={`education-${item.id || index}-endDate`}>毕业时间</label>
+              <input id={`education-${item.id || index}-endDate`}
                 type="text"
                 value={item.endDate || ''}
                 onChange={e => update(index, 'endDate', e.target.value)}
@@ -175,10 +176,10 @@ export function EducationSection({ items, onChange }: Props) {
             </div>
           </div>
 
-          <div style={styles.row}>
+          <div className="record-editor-row" style={styles.row}>
             <div style={styles.group}>
-              <label style={styles.label}>GPA / 成绩</label>
-              <input
+              <label style={styles.label} htmlFor={`education-${item.id || index}-gpa`}>GPA / 成绩</label>
+              <input id={`education-${item.id || index}-gpa`}
                 type="text"
                 value={item.gpa || ''}
                 onChange={e => update(index, 'gpa', e.target.value)}
@@ -187,8 +188,8 @@ export function EducationSection({ items, onChange }: Props) {
               />
             </div>
             <div style={styles.group}>
-              <label style={styles.label}>排名</label>
-              <input
+              <label style={styles.label} htmlFor={`education-${item.id || index}-ranking`}>排名</label>
+              <input id={`education-${item.id || index}-ranking`}
                 type="text"
                 value={item.ranking || ''}
                 onChange={e => update(index, 'ranking', e.target.value)}

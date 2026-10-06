@@ -20,7 +20,7 @@ import type {
 import { AISettings } from './AISettings';
 import { EducationSection } from './EducationSection';
 import { ExperienceSection } from './ExperienceSection';
-import { DataSyncSettings } from './DataSyncSettings';
+import { DataBackupSettings } from './DataBackupSettings';
 import { removeResumeVariant } from '../shared/resumes.ts';
 
 interface ImportReviewState {
@@ -34,22 +34,31 @@ interface ImportReviewState {
   open: boolean;
 }
 
-const OPTION_TABS = [
-  'personal',
-  'education',
-  'experience',
-  'more',
-  'custom',
-  'resume',
-  'ai',
-  'data-sync',
+const PROFILE_SECTIONS = [
+  { id: 'personal', label: '基本信息' },
+  { id: 'education', label: '教育经历' },
+  { id: 'experience', label: '实习、项目与技能' },
+  { id: 'more', label: '更多个人资料' },
+  { id: 'custom', label: '自定义信息' },
+  { id: 'resume', label: '简历附件' },
+  { id: 'ai', label: 'AI 设置' },
+  { id: 'data-backup', label: '数据备份' },
 ] as const;
 
-type OptionTab = typeof OPTION_TABS[number];
+type ProfileSectionId = typeof PROFILE_SECTIONS[number]['id'];
 
-function getInitialActiveTab(search: string): OptionTab {
-  const tab = new URLSearchParams(search).get('tab');
-  return OPTION_TABS.includes(tab as OptionTab) ? tab as OptionTab : 'personal';
+function getInitialSection(): ProfileSectionId {
+  if (typeof window === 'undefined') return 'personal';
+  const requested = window.location.hash.replace('#profile-', '')
+    || new URLSearchParams(window.location.search).get('tab');
+  const section = requested === 'data-sync' ? 'data-backup' : requested;
+  return PROFILE_SECTIONS.some(item => item.id === section) ? section as ProfileSectionId : 'personal';
+}
+
+function openProfileSection(id: ProfileSectionId) {
+  const element = document.getElementById(`profile-${id}`);
+  if (element instanceof HTMLDetailsElement) element.open = true;
+  return element;
 }
 
 function hasChromeApis(): boolean {
@@ -125,13 +134,8 @@ function App() {
   });
   const [loading, setLoading] = useState(hasChromeApis());
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<OptionTab>(() => {
-    if (typeof window === 'undefined') {
-      return 'personal';
-    }
-
-    return getInitialActiveTab(window.location.search);
-  });
+  const initialSectionRef = useRef(getInitialSection());
+  const [activeSection, setActiveSection] = useState<ProfileSectionId>(getInitialSection);
   const [dataRevision, setDataRevision] = useState(0);
   const [parsingResume, setParsingResume] = useState(false);
   const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
@@ -168,12 +172,37 @@ function App() {
     ) => {
       if (areaName === 'local' && changes.userProfile) {
         void loadProfile();
-        setDataRevision(revision => revision + 1);
       }
     };
     chrome.storage.onChanged.addListener(handleStorageChange);
     return () => chrome.storage.onChanged.removeListener(handleStorageChange);
   }, []);
+
+  useEffect(() => {
+    if (loading) return;
+    const initial = initialSectionRef.current;
+    const frame = window.requestAnimationFrame(() => {
+      if (initial !== 'personal') openProfileSection(initial)?.scrollIntoView();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [loading]);
+
+  useEffect(() => {
+    if (loading) return;
+    let frame = 0;
+    const updateSection = () => {
+      frame = 0;
+      let current: ProfileSectionId = 'personal';
+      for (const section of PROFILE_SECTIONS) {
+        const element = document.getElementById(`profile-${section.id}`);
+        if (element && element.getBoundingClientRect().top <= 160) current = section.id;
+      }
+      setActiveSection(current);
+    };
+    const onScroll = () => { if (!frame) frame = window.requestAnimationFrame(updateSection); };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => { window.removeEventListener('scroll', onScroll); window.cancelAnimationFrame(frame); };
+  }, [loading]);
 
   const loadProfile = async () => {
     if (!hasChromeApis()) {
@@ -437,8 +466,8 @@ function App() {
             />
             <div>
               <span className="options-brand-name">JOB APPLYMATE</span>
-              <h1>建立你的申请资料库</h1>
-              <p>一次整理，全网招聘站点一键自动填报与智能纠偏。</p>
+              <h1>填写你的申请资料</h1>
+              <p>像填写简历一样，一页整理基本信息与经历，保存后用于网申填写。</p>
             </div>
           </div>
           <div className="options-header-actions">
@@ -468,99 +497,35 @@ function App() {
 
       {importProgress && <ResumeImportProgress progress={importProgress} onCancel={cancelImport} onRetry={() => { if (lastUploadRef.current) void processResumeFile(lastUploadRef.current); else globalFileInputRef.current?.click(); }} onReview={() => setImportReviewData(previous => previous ? { ...previous, open: true } : null)} />}
       <div className="options-content">
-        <nav className="options-tabs" aria-label="设置分类">
-          <button
-            onClick={() => setActiveTab('personal')}
-            className={activeTab === 'personal' ? 'options-tab active' : 'options-tab'}
-          >
-            <span>基本信息</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('education')}
-            className={activeTab === 'education' ? 'options-tab active' : 'options-tab'}
-          >
-            <span>教育经历</span>
-            {(profile.education?.length ?? 0) > 0 && (
-              <span className="tab-badge">{profile.education?.length}</span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('experience')}
-            className={activeTab === 'experience' ? 'options-tab active' : 'options-tab'}
-          >
-            <span>实习与项目</span>
-            {((profile.experience?.length || 0) + (profile.projects?.length || 0) + (profile.skills?.length ? 1 : 0)) > 0 && (
-              <span className="tab-badge">{(profile.experience?.length || 0) + (profile.projects?.length || 0)}</span>
-            )}
-          </button>
-          <button onClick={() => setActiveTab('more')} className={activeTab === 'more' ? 'options-tab active' : 'options-tab'}>
-            更多资料
-            {SUPPLEMENTAL_COLLECTIONS.some(collection => profile[collection]?.length) && <span className="tab-badge">{SUPPLEMENTAL_COLLECTIONS.reduce((count, collection) => count + (profile[collection]?.length || 0), 0)}</span>}
-          </button>
-          <button
-            onClick={() => setActiveTab('custom')}
-            className={activeTab === 'custom' ? 'options-tab active' : 'options-tab'}
-          >
-            <span>自定义信息</span>
-            {(profile.customInformation?.length ?? 0) > 0 && (
-              <span className="tab-badge">{profile.customInformation?.length}</span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('resume')}
-            className={activeTab === 'resume' ? 'options-tab active' : 'options-tab'}
-          >
-            <span>简历库</span>
-            {(profile.resumes?.length ?? 0) > 0 && (
-              <span className="tab-badge">{profile.resumes?.length}</span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('ai')}
-            className={activeTab === 'ai' ? 'options-tab active' : 'options-tab'}
-          >
-            <span>AI设置</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('data-sync')}
-            className={activeTab === 'data-sync' ? 'options-tab active' : 'options-tab'}
-          >
-            <span>数据与同步</span>
-          </button>
-        </nav>
+        <aside className="profile-sidebar">
+          <nav className="profile-directory" aria-label="资料页内目录">
+            <p className="profile-directory-title">本页目录</p>
+            {PROFILE_SECTIONS.map((section, index) => (
+              <a
+                key={section.id}
+                href={`#profile-${section.id}`}
+                aria-current={activeSection === section.id ? 'location' : undefined}
+                onClick={() => {
+                  setActiveSection(section.id);
+                  openProfileSection(section.id)?.focus({ preventScroll: true });
+                }}
+              >
+                <span className="profile-directory-index" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
+                <span>{section.label}</span>
+              </a>
+            ))}
+            <p className="profile-directory-hint">可按顺序填写，也可点击目录跳到对应位置。</p>
+          </nav>
+        </aside>
 
-        <div className="options-panel">
-          {activeTab === 'personal' && (
-            <div className="options-form">
-              <div className="smart-setup-card">
-                <div>
-                  <span className="smart-setup-badge">⚡ 智能建档助手</span>
-                  <h3 className="smart-setup-title">直接从现有简历解析资料库</h3>
-                  <p className="smart-setup-desc">
-                    支持直接上传 PDF、DOCX、Markdown、TXT 格式简历。系统将自动抽取个人信息、教育、工作、项目及技能，并在界面中高亮核对缺失项，一键补全建档。
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="smart-setup-btn"
-                  onClick={() => globalFileInputRef.current?.click()}
-                  disabled={parsingResume}
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="17 8 12 3 7 8"></polyline>
-                    <line x1="12" y1="3" x2="12" y2="15"></line>
-                  </svg>
-                  <span>{parsingResume ? '正在解析...' : '上传简历一键提取'}</span>
-                </button>
-              </div>
-
+        <main className="profile-document" aria-label="申请资料表单">
+          <section id="profile-personal" className="profile-section options-form" aria-label="基本信息" tabIndex={-1}>
               <h2 className="section-title">个人基本信息</h2>
 
               <div className="form-grid-2">
                 <div style={styles.formGroup}>
-                  <label style={styles.label}>姓名 *</label>
-                  <input
+                  <label style={styles.label} htmlFor="personal-name">姓名</label>
+                  <input id="personal-name"
                     type="text"
                     value={profile.personal.name || ''}
                     onChange={(e) => handlePersonalChange('name', e.target.value)}
@@ -570,8 +535,8 @@ function App() {
                 </div>
 
                 <div style={styles.formGroup}>
-                  <label style={styles.label}>性别</label>
-                  <select
+                  <label style={styles.label} htmlFor="personal-gender">性别</label>
+                  <select id="personal-gender"
                     value={profile.personal.gender || ''}
                     onChange={(e) => handlePersonalChange('gender', e.target.value)}
                     style={styles.input}
@@ -583,8 +548,8 @@ function App() {
                 </div>
 
                 <div style={styles.formGroup}>
-                  <label style={styles.label}>出生日期</label>
-                  <input
+                  <label style={styles.label} htmlFor="personal-birthDate">出生日期</label>
+                  <input id="personal-birthDate"
                     type="text"
                     value={profile.personal.birthDate || ''}
                     onChange={(e) => handlePersonalChange('birthDate', e.target.value)}
@@ -594,8 +559,8 @@ function App() {
                 </div>
 
                 <div style={styles.formGroup}>
-                  <label style={styles.label}>政治面貌</label>
-                  <select
+                  <label style={styles.label} htmlFor="personal-politicalStatus">政治面貌</label>
+                  <select id="personal-politicalStatus"
                     value={profile.personal.politicalStatus || ''}
                     onChange={(e) => handlePersonalChange('politicalStatus', e.target.value)}
                     style={styles.input}
@@ -610,8 +575,8 @@ function App() {
                 </div>
 
                 <div style={styles.formGroup}>
-                  <label style={styles.label}>民族</label>
-                  <input
+                  <label style={styles.label} htmlFor="personal-ethnicity">民族</label>
+                  <input id="personal-ethnicity"
                     type="text"
                     value={profile.personal.ethnicity || ''}
                     onChange={(e) => handlePersonalChange('ethnicity', e.target.value)}
@@ -621,8 +586,8 @@ function App() {
                 </div>
 
                 <div style={styles.formGroup}>
-                  <label style={styles.label}>身份证号</label>
-                  <input
+                  <label style={styles.label} htmlFor="personal-idCard">身份证号</label>
+                  <input id="personal-idCard"
                     type="text"
                     value={profile.personal.idCard || ''}
                     onChange={(e) => handlePersonalChange('idCard', e.target.value)}
@@ -633,8 +598,8 @@ function App() {
                 </div>
 
                 <div style={styles.formGroup}>
-                  <label style={styles.label}>手机号 *</label>
-                  <input
+                  <label style={styles.label} htmlFor="personal-phone">手机号</label>
+                  <input id="personal-phone"
                     type="tel"
                     value={profile.personal.phone || ''}
                     onChange={(e) => handlePersonalChange('phone', e.target.value)}
@@ -644,8 +609,8 @@ function App() {
                 </div>
 
                 <div style={styles.formGroup}>
-                  <label style={styles.label}>邮箱 *</label>
-                  <input
+                  <label style={styles.label} htmlFor="personal-email">邮箱</label>
+                  <input id="personal-email"
                     type="email"
                     value={profile.personal.email || ''}
                     onChange={(e) => handlePersonalChange('email', e.target.value)}
@@ -655,8 +620,8 @@ function App() {
                 </div>
 
                 <div style={styles.formGroup}>
-                  <label style={styles.label}>微信号</label>
-                  <input
+                  <label style={styles.label} htmlFor="personal-wechat">微信号</label>
+                  <input id="personal-wechat"
                     type="text"
                     value={profile.personal.wechat || ''}
                     onChange={(e) => handlePersonalChange('wechat', e.target.value)}
@@ -666,8 +631,8 @@ function App() {
                 </div>
 
                 <div style={styles.formGroup}>
-                  <label style={styles.label}>籍贯</label>
-                  <input
+                  <label style={styles.label} htmlFor="personal-hometown">籍贯</label>
+                  <input id="personal-hometown"
                     type="text"
                     value={profile.personal.hometown || ''}
                     onChange={(e) => handlePersonalChange('hometown', e.target.value)}
@@ -678,8 +643,8 @@ function App() {
               </div>
 
               <div style={styles.formGroup}>
-                <label style={styles.label}>现居地</label>
-                <input
+                <label style={styles.label} htmlFor="personal-currentAddress">现居地</label>
+                <input id="personal-currentAddress"
                   type="text"
                   value={profile.personal.currentAddress || ''}
                   onChange={(e) => handlePersonalChange('currentAddress', e.target.value)}
@@ -689,8 +654,8 @@ function App() {
               </div>
 
               <div style={styles.formGroup}>
-                <label style={styles.label}>自我评价</label>
-                <textarea
+                <label style={styles.label} htmlFor="personal-selfEvaluation">自我评价</label>
+                <textarea id="personal-selfEvaluation"
                   value={profile.personal.selfEvaluation || ''}
                   onChange={(e) => {
                     resizeAutoGrowTextarea(e.currentTarget);
@@ -705,7 +670,8 @@ function App() {
                 />
               </div>
 
-              <h3 style={{ marginTop: '28px', marginBottom: '8px', fontSize: '16px', fontWeight: 650, color: 'var(--color-text)' }}>补充个人资料（选填）</h3>
+              <details className="profile-optional" open={PERSONAL_EXTRA_FIELDS.some(field => profile.personal[field.key]) || getPersonalAdditionalFields(profile).length > 0}>
+                <summary>求职偏好与其他个人信息 <span>选填</span></summary>
               <p style={{ margin: '0 0 16px', fontSize: '13px', color: 'var(--color-muted)' }}>填写后可在不同招聘页面自动使用；没有的信息保持空白即可。</p>
               <div className="form-grid-2">
                 {PERSONAL_EXTRA_FIELDS.map(field => (
@@ -726,24 +692,22 @@ function App() {
                 onChange={additionalFields => setProfile({ ...profile, personal: { ...profile.personal, additionalFields } })}
               />
 
-              <div className="info-note">
-                💡 提示：带 * 的为必填项。你也可以通过上传简历来快速填充这些信息。
-                资料默认保存在本地。使用 AI 解析或辅助填写时，相关文字会发送至你配置的 AI 服务；启用同步后会保存到你的 WebDAV。
-              </div>
-            </div>
-          )}
+              </details>
 
-          {activeTab === 'education' && (
-            <div className="options-form">
+              <div className="info-note">
+                可先填写姓名与联系方式，再按需补充经历。你也可以从现有简历提取资料。
+                资料默认保存在本地。使用 AI 解析或辅助填写时，相关文字会发送至你配置的 AI 服务。
+              </div>
+          </section>
+
+          <section id="profile-education" className="profile-section options-form" aria-label="教育经历" tabIndex={-1}>
               <EducationSection
                 items={profile.education || []}
                 onChange={education => setProfile({ ...profile, education })}
               />
-            </div>
-          )}
+          </section>
 
-          {activeTab === 'experience' && (
-            <div className="options-form">
+          <section id="profile-experience" className="profile-section options-form" aria-label="实习、项目与技能" tabIndex={-1}>
               <ExperienceSection
                 experience={profile.experience || []}
                 projects={profile.projects || []}
@@ -752,13 +716,13 @@ function App() {
                 onChangeProjects={projects => setProfile({ ...profile, projects })}
                 onChangeSkills={skills => setProfile({ ...profile, skills })}
               />
-            </div>
-          )}
+          </section>
 
-          {activeTab === 'more' && <SupplementalProfileSection profile={profile} onChange={setProfile} />}
+          <section id="profile-more" className="profile-section" aria-label="更多个人资料" tabIndex={-1}>
+            <SupplementalProfileSection profile={profile} onChange={setProfile} />
+          </section>
 
-          {activeTab === 'custom' && (
-            <div className="options-form">
+          <section id="profile-custom" className="profile-section options-form" aria-label="自定义信息" tabIndex={-1}>
               <div className="custom-information-header">
                 <div>
                   <h2 className="section-title">自定义信息</h2>
@@ -819,8 +783,7 @@ function App() {
                   ))}
                 </div>
               )}
-            </div>
-          )}
+          </section>
 
           {importReviewData?.open && (
             <ProfileImportDraft
@@ -853,9 +816,8 @@ function App() {
               }}
             />
           )}
-          {activeTab === 'resume' && (
-            <div className="options-form">
-              <h2 className="section-title">简历库</h2>
+          <section id="profile-resume" className="profile-section options-form" aria-label="简历附件" tabIndex={-1}>
+              <h2 className="section-title">简历附件</h2>
 
               <label className="resume-category-field">
                 <span>本次添加到哪个分类</span>
@@ -937,27 +899,30 @@ function App() {
                 )}
 
                 <div className="info-note">
-                  每份简历会独立保存解析资料，切换简历时悬浮窗和自动填写内容会同步切换；新增简历不会覆盖已有资料。删除后会立即保存，修改分类后请点击下方“保存设置”。
+                  每份简历会独立保存解析资料，切换简历时悬浮窗和自动填写内容会同步切换；新增简历不会覆盖已有资料。删除后会立即保存，修改分类后请点击“保存全部资料”。
                 </div>
               </div>
-            </div>
-          )}
+          </section>
 
-          {activeTab === 'ai' && <AISettings dataRevision={dataRevision} />}
+          <details id="profile-ai" className="profile-section profile-tool" tabIndex={-1} open={initialSectionRef.current === 'ai'}>
+            <summary><span>AI 设置</span><small>按需配置，用于简历解析与辅助填写</small></summary>
+            <div className="profile-tool-content"><AISettings dataRevision={dataRevision} /></div>
+          </details>
 
-          {activeTab === 'data-sync' && (
-            <DataSyncSettings onDataChanged={handleExternalDataChange} />
-          )}
-
-          {activeTab !== 'ai' && activeTab !== 'data-sync' && (
-            <div className="options-actions">
-            <button onClick={handleSave} disabled={saving} className="btn btn-primary">
-              {saving ? '保存中...' : '保存设置'}
-            </button>
-            </div>
-          )}
-        </div>
+          <details id="profile-data-backup" className="profile-section profile-tool" tabIndex={-1} open={initialSectionRef.current === 'data-backup'}>
+            <summary><span>数据备份</span><small>导入或导出本地 JSON 备份</small></summary>
+            <div className="profile-tool-content"><DataBackupSettings onDataChanged={handleExternalDataChange} /></div>
+          </details>
+        </main>
       </div>
+      <footer className="profile-save-bar">
+        <div className="profile-save-inner">
+          <div><strong>所有个人资料统一保存</strong><p>修改后点击保存；AI 配置在展开的设置中单独保存。</p></div>
+          <button type="button" onClick={handleSave} disabled={saving} className="btn btn-primary">
+            {saving ? '保存中...' : '保存全部资料'}
+          </button>
+        </div>
+      </footer>
     </div>
   );
 }

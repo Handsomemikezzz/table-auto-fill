@@ -22,7 +22,7 @@ Job ApplyMate is a Chrome and Edge extension that keeps job-application informat
 | Information panel | Focus a web form control and write one saved profile value at a time; rejected values are copied automatically |
 | Resume library | Store role-specific resumes with independent parsed profiles and original filenames; profile source and attachment are selected independently |
 | Resume parsing | Import PDF, DOCX, Markdown, TXT, and structured JSON resumes |
-| Backup and sync | Versioned JSON import/export and optional conflict-aware WebDAV synchronization |
+| Local backup | Versioned JSON import/export |
 
 ## Install
 
@@ -62,8 +62,8 @@ npm run package:extension
 
 1. Click the extension icon.
 2. Select **资料与模型设置** (Profile and model settings).
-3. Enter your personal information, education, work experience, projects, and custom values.
-4. Click **保存设置** (Save Settings).
+3. Complete personal information, education, work experience, projects, supplemental facts, and custom values on one continuous page. Use the in-page directory to jump to a section.
+4. Click **保存全部资料** (Save all profile information) in the fixed footer. AI settings and data backup expand at the bottom of the page.
 
 Add undergraduate and graduate education as separate records. Each record keeps its own school, college/department, major, major category/discipline, study mode, education level, academic degree, and dates. When a form explicitly says undergraduate or graduate, the matching record is selected instead of relying only on list order.
 Missing colleges, study modes, degrees and date precision remain missing. Rule-based filling works without a model; configuring one enables fallback for remaining fields. Profile management, local parsing, the manual information assistant and backups remain available without a model.
@@ -86,9 +86,9 @@ The configured model endpoint is the only endpoint used. Rules run across the pa
 
 A navigation requires starting another session. The extension never submits applications.
 
-### 7. Backup and restore
+### 5. Backup and restore
 
-Open **数据与同步**:
+Open **数据备份** (Data backup):
 
 - **导出完整数据** downloads a versioned JSON backup.
 - **导入完整数据** validates a previous JSON backup before replacing local profile data.
@@ -96,12 +96,7 @@ Open **数据与同步**:
 
 No manual changes to an old JSON file are required. New missing-information answers, site learning records, and AI recognition rules are included when a new full backup is exported.
 
-The legacy WebDAV path is intentionally retained for backward compatibility:
-
-```text
-job-application-helper/
-└── job-application-helper.json
-```
+WebDAV configuration in older backups is ignored. New backups exclude it, and the extension removes retired WebDAV credentials and sync status from local storage when it starts.
 
 Backups can contain personal information, resume files, AI configuration, and API keys. Store them securely.
 
@@ -128,8 +123,7 @@ npm run package:extension # Build the release ZIP
 
 - Data is stored in `chrome.storage.local` by default.
 - JSON imports are limited to 20 MiB.
-- Manual backups and WebDAV backups are plain JSON and may contain sensitive profile data and AI API keys.
-- Data is sent to WebDAV only after the user explicitly configures and enables synchronization.
+- Manual backups are plain JSON and may contain sensitive profile data and AI API keys.
 - Export a backup before uninstalling the extension or clearing extension data.
 
 ## License

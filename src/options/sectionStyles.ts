@@ -30,7 +30,7 @@ export const sectionStyles: Record<string, React.CSSProperties> = {
   cardActions: { display: 'flex', gap: '6px' },
   iconButton: {
     minWidth: '44px',
-    height: '26px',
+    minHeight: '36px',
     padding: '0 8px',
     border: '1px solid #d4d8df',
     borderRadius: '7px',
@@ -41,7 +41,7 @@ export const sectionStyles: Record<string, React.CSSProperties> = {
   },
   removeButton: {
     padding: '0 10px',
-    height: '26px',
+    minHeight: '36px',
     border: '1px solid #fecaca',
     borderRadius: '7px',
     backgroundColor: 'white',
@@ -50,8 +50,8 @@ export const sectionStyles: Record<string, React.CSSProperties> = {
     fontSize: '12px',
     fontFamily: 'inherit',
   },
-  row: { display: 'flex', gap: '12px', marginBottom: '12px' },
-  group: { flex: 1, marginBottom: '12px' },
+  row: { gap: '16px', marginBottom: '12px' },
+  group: { flex: 1, minWidth: 0, marginBottom: '12px' },
   label: {
     display: 'block',
     marginBottom: '6px',

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MessageService } from '../shared/message';
 import { LLMProvider, PROVIDER_PRESETS, PROVIDER_ORDER } from '../services/llm/types';
 import type { LLMConfig } from '../services/llm/types';
@@ -30,6 +30,7 @@ export function AISettings({ dataRevision = 0 }: AISettingsProps) {
   const [recognitionRules, setRecognitionRules] = useState(DEFAULT_FIELD_RECOGNITION_RULES_MD);
 
   useEffect(() => {
+    if (typeof chrome === 'undefined' || !chrome.storage?.onChanged) return;
     const loadConfig = () => MessageService.sendMessage({ type: 'GET_LLM_CONFIG' }).then(res => {
       if (res.success && res.data) {
         const stored = res.data as LLMConfig;
@@ -102,7 +103,7 @@ export function AISettings({ dataRevision = 0 }: AISettingsProps) {
 
   const handleSave = async () => {
     const [response, rulesResponse] = await Promise.all([
-      MessageService.sendMessage<{ localSaved: boolean; sync: string }>({
+      MessageService.sendMessage<{ localSaved: boolean }>({
         type: 'SAVE_LLM_CONFIG',
         payload: config,
       }),
@@ -116,9 +117,7 @@ export function AISettings({ dataRevision = 0 }: AISettingsProps) {
     setSaveFailed(!success);
     setSaveMessage(
       success
-        ? response.data?.sync === 'queued'
-          ? '已保存到本地，同步已排队'
-          : '已保存到本地'
+        ? '已保存到本地'
         : response.error || rulesResponse.error || '保存失败',
     );
     setTimeout(() => setSaved(false), 2000);
