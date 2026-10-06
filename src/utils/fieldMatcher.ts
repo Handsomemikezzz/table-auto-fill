@@ -26,7 +26,7 @@ export class FieldMatcher {
     const htmlType = type.toLowerCase();
 
     // 紧急联系人、家属和监护人属于第三方资料，绝不能仅因出现“电话/姓名”
-    // 就套用候选人本人的 phone/name；留给学习记录或 AI 补填确认。
+    // 就套用候选人本人的 phone/name；留给用户确认或手动填写。
     const asksThirdPartyContact = /紧急\s*联系(?:人|方式|电话)?|应急\s*联系(?:人|方式|电话)?|紧急\s*联络(?:人|方式|电话)?|家庭\s*联系(?:人|方式|电话)?|家属\s*联系(?:人|方式|电话)?|监护人|(?:^|\s)(?:emergency\s*contact|guardian)(?:$|\s)/i
       .test(`${primary} ${context}`);
     if (asksThirdPartyContact) return { fieldType: FieldType.UNKNOWN, confidence: 0 };

@@ -8,7 +8,6 @@
 
 规则基线：`npm run eval:fields -- --output /tmp/field-report.json`。
 
-规则加真实模型：`npm run eval:fields -- --mode model --config /absolute/path/llm-config.json --output /tmp/model-report.json`。配置复用项目的 `LLMConfig` 格式；使用一个已配置模型，所有输入均为合成资料，不打印凭据。每模块请求上限 20 秒，失败计入报告，继续其他模块。配置文件不得提交到仓库。
 
 评分器回归：`npm run test:site-eval`。控件执行回归继续使用 `npm run test:form-fill`，已有构建时用 `npm run test:form-fill:browser`。
 
@@ -22,6 +21,6 @@
 
 先从已登录的企业申请页只读采集标签、类型、模块和选项，再脱敏写入独立版本的来源文件。采集前后保留“不写入、不上传、不提交”的行为边界；不要保存用户值、认证令牌或登录态。
 
-每个字段审核正确含义、主体、记录和处理策略。确认后更新 annotationStatus，并冻结新的 benchmarkVersion。未读选项使用 `unread`，真实完整列表才用 `complete`。不得按当前规则或模型输出反过来修改正确答案以提高分数。
+每个字段审核正确含义、主体、记录和处理策略。确认后更新 annotationStatus，并冻结新的 benchmarkVersion。未读选项使用 `unread`，真实完整列表才用 `complete`。不得按当前规则输出反过来修改正确答案以提高分数。
 
 开发来源用于规则和组件修复；AvePoint 在首轮实现后采集并用于留出评测，未据其结果补选项标签规则；缺少标签关联的原生单选交给人工。后续若按该样本修复，它应转为开发样本，并另选留出来源。不使用构造页面冒充整张网站的执行验证。人工检查时间需在固定步骤下另行记录，本次没有人工计时数据。

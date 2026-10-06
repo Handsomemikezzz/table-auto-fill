@@ -5,14 +5,12 @@ import type {
   SettingsData,
   UserProfile,
 } from './types';
-import type { LLMConfig } from '../services/llm/types';
 import { normalizeResumeLibrary } from './resumes.ts';
 import { normalizeBirthDateValue, normalizePoliticalStatusValue } from './personal.ts';
 
 export const STORAGE_KEYS = {
   USER_PROFILE: 'userProfile',
   SETTINGS: 'settings',
-  LLM_CONFIG: 'llmConfig',
   // Keep the retired key for non-destructive legacy backup compatibility.
   LEGACY_APPLICATION_RECORDS: 'applicationRecords',
 } as const;
@@ -56,7 +54,24 @@ function normalizeEducationLevel(degree?: string): string {
   return value;
 }
 
+export function normalizeSettings(settings: SettingsData | null): SettingsData | null {
+  if (!settings) return null;
+  const { fieldRecognitionRules: _rules, controlExperiencesV1: _experiences, meaningCorrectionsV1: _corrections, learnedFieldValues: _learned, ...local } = settings;
+  return local;
+}
+
 export class StorageService {
+  static async removeRetiredData(): Promise<void> {
+    const stored = await chrome.storage.local.get(null);
+    const retired = Object.keys(stored).filter(key => ['llmConfig', 'webdavConfig', 'syncMetadata'].includes(key)
+      || key.startsWith('fieldMatch_v') || key.startsWith('aiPageFill_v'));
+    if (retired.length) await chrome.storage.local.remove(retired);
+    if (stored.settings && typeof stored.settings === 'object') {
+      const settings = normalizeSettings(stored.settings as SettingsData);
+      if (JSON.stringify(settings) !== JSON.stringify(stored.settings)) await this.saveSettings(settings!);
+    }
+  }
+
   // 获取用户资料
   static async getUserProfile(): Promise<UserProfile | null> {
     try {
@@ -127,49 +142,25 @@ export class StorageService {
     }
   }
 
-  // 获取 LLM 配置
-  static async getLLMConfig(): Promise<LLMConfig | null> {
-    try {
-      const result = await chrome.storage.local.get(STORAGE_KEYS.LLM_CONFIG);
-      return (result[STORAGE_KEYS.LLM_CONFIG] as LLMConfig) || null;
-    } catch {
-      return null;
-    }
-  }
-
-  // 保存 LLM 配置
-  static async saveLLMConfig(config: LLMConfig): Promise<boolean> {
-    try {
-      await chrome.storage.local.set({
-        [STORAGE_KEYS.LLM_CONFIG]: config,
-      });
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
   static async getSettings(): Promise<SettingsData | null> {
     const result = await chrome.storage.local.get(STORAGE_KEYS.SETTINGS);
-    return (result[STORAGE_KEYS.SETTINGS] as SettingsData) || null;
+    return normalizeSettings((result[STORAGE_KEYS.SETTINGS] as SettingsData) || null);
   }
 
   static async saveSettings(settings: SettingsData): Promise<void> {
-    await chrome.storage.local.set({ [STORAGE_KEYS.SETTINGS]: settings });
+    await chrome.storage.local.set({ [STORAGE_KEYS.SETTINGS]: normalizeSettings(settings) });
   }
 
   static async getBackupData(): Promise<BackupData> {
     const result = await chrome.storage.local.get([
       STORAGE_KEYS.USER_PROFILE,
-      STORAGE_KEYS.LLM_CONFIG,
       STORAGE_KEYS.SETTINGS,
       STORAGE_KEYS.LEGACY_APPLICATION_RECORDS,
     ]);
     const profile = (result[STORAGE_KEYS.USER_PROFILE] as UserProfile | undefined) || null;
     return {
       userProfile: profile ? normalizeUserProfile(profile) : null,
-      llmConfig: (result[STORAGE_KEYS.LLM_CONFIG] as LLMConfig | undefined) || null,
-      settings: (result[STORAGE_KEYS.SETTINGS] as SettingsData | undefined) || null,
+      settings: normalizeSettings((result[STORAGE_KEYS.SETTINGS] as SettingsData | undefined) || null),
       applicationRecords: (result[STORAGE_KEYS.LEGACY_APPLICATION_RECORDS] as BackupData['applicationRecords']) ?? [],
     };
   }
@@ -179,8 +170,7 @@ export class StorageService {
     const removals: string[] = [];
     const entries = [
       [STORAGE_KEYS.USER_PROFILE, data.userProfile],
-      [STORAGE_KEYS.LLM_CONFIG, data.llmConfig],
-      [STORAGE_KEYS.SETTINGS, data.settings],
+      [STORAGE_KEYS.SETTINGS, normalizeSettings(data.settings)],
     ] as const;
 
     for (const [key, value] of entries) {

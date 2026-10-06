@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { PersonalInfo } from '../shared/types.ts';
+import type { PersonalInfo } from './types.ts';
 import {
   BASIC_INFO_FIELDS,
   buildBasicInfoItems,

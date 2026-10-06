@@ -32,12 +32,6 @@ const completeData: BackupData = {
       uploadDate: '2026-01-01T00:00:00.000Z',
     },
   },
-  llmConfig: {
-    provider: 'deepseek' as never,
-    apiKey: 'sk-secret',
-    baseUrl: 'https://api.deepseek.com/v1',
-    model: 'deepseek-chat',
-  },
   settings: { locale: 'zh-CN' },
   applicationRecords: [
     {
@@ -56,6 +50,40 @@ const completeData: BackupData = {
   ],
 };
 
+function installChromeStorageMock(initial: Record<string, unknown>) {
+  const values = { ...initial };
+  const previousChrome = Object.getOwnPropertyDescriptor(globalThis, 'chrome');
+  Object.defineProperty(globalThis, 'chrome', {
+    configurable: true,
+    value: {
+      runtime: {
+        getManifest: () => ({ version: '1.0.0' }),
+      },
+      storage: {
+        local: {
+          get: async (keys: string | string[]) => {
+            const selected = keys === null ? Object.keys(values) : Array.isArray(keys) ? keys : [keys];
+            return Object.fromEntries(
+              selected.filter(key => Object.hasOwn(values, key)).map(key => [key, values[key]]),
+            );
+          },
+          set: async (entries: Record<string, unknown>) => Object.assign(values, entries),
+          remove: async (keys: string | string[]) => {
+            for (const key of Array.isArray(keys) ? keys : [keys]) delete values[key];
+          },
+        },
+      },
+    },
+  });
+  return {
+    values,
+    restore: () => {
+      if (previousChrome) Object.defineProperty(globalThis, 'chrome', previousChrome);
+      else delete (globalThis as { chrome?: unknown }).chrome;
+    },
+  };
+}
+
 function validJson() {
   return serializeBackup(createBackupDocument(
     completeData,
@@ -64,12 +92,11 @@ function validJson() {
   ));
 }
 
-test('合法 V1 文档完整保留简历和 API Key', () => {
+test('合法 V1 文档完整保留简历和资料', () => {
   const result = parseAndValidateBackup(validJson());
   assert.equal(result.success, true);
   if (!result.success) return;
   assert.equal(result.document.data.userProfile?.resume?.fileData, completeData.userProfile?.resume?.fileData);
-  assert.equal(result.document.data.llmConfig?.apiKey, 'sk-secret');
   assert.equal(result.document.data.applicationRecords?.[0]?.companyName, '字节跳动');
 });
 
@@ -139,39 +166,6 @@ test('多简历条目中的文件数据必须为字符串', () => {
   if (!result.success) assert.equal(result.error.code, 'INVALID_USER_PROFILE');
 });
 
-test('合法 V1 文档完整保留自定义视觉开关', () => {
-  const json = serializeBackup(createBackupDocument({
-    ...completeData,
-    llmConfig: {
-      provider: 'custom' as never,
-      apiKey: 'sk-secret',
-      baseUrl: 'https://example.com/v1',
-      model: 'my-vision-model',
-      visionEnabled: true,
-    },
-  }, '1.0.0', '2026-01-01T00:00:00.000Z'));
-  const result = parseAndValidateBackup(json);
-  assert.equal(result.success, true);
-  if (!result.success) return;
-  assert.equal(result.document.data.llmConfig?.visionEnabled, true);
-});
-
-const invalidCases: Array<[string, string, string]> = [
-  ['非 JSON', '{', 'INVALID_JSON'],
-  ['根节点数组', '[]', 'INVALID_ROOT'],
-  ['缺少版本', JSON.stringify({}), 'MISSING_SCHEMA_VERSION'],
-  ['未来版本', JSON.stringify({ schemaVersion: 2 }), 'UNSUPPORTED_FUTURE_VERSION'],
-  ['版本非整数', JSON.stringify({ schemaVersion: 1.5 }), 'INVALID_SCHEMA_VERSION'],
-];
-
-for (const [name, raw, code] of invalidCases) {
-  test(`拒绝${name}`, () => {
-    const result = parseAndValidateBackup(raw);
-    assert.equal(result.success, false);
-    if (!result.success) assert.equal(result.error.code, code);
-  });
-}
-
 test('拒绝错误的用户资料数组', () => {
   const document = JSON.parse(validJson());
   document.data.userProfile.education = {};
@@ -210,71 +204,11 @@ test('拒绝非字符串简历正文', () => {
   if (!result.success) assert.equal(result.error.code, 'INVALID_USER_PROFILE');
 });
 
-test('拒绝非字符串 API Key', () => {
-  const document = JSON.parse(validJson());
-  document.data.llmConfig.apiKey = 123;
-  const result = parseAndValidateBackup(JSON.stringify(document));
-  assert.equal(result.success, false);
-  if (!result.success) assert.equal(result.error.code, 'INVALID_LLM_CONFIG');
-});
-
-test('拒绝非布尔值视觉开关', () => {
-  const document = JSON.parse(validJson());
-  document.data.llmConfig.visionEnabled = 'yes';
-  const result = parseAndValidateBackup(JSON.stringify(document));
-  assert.equal(result.success, false);
-  if (!result.success) assert.equal(result.error.code, 'INVALID_LLM_CONFIG');
-});
-
 test('拒绝超过 20 MiB 的输入', () => {
   const result = parseAndValidateBackup('x'.repeat(MAX_BACKUP_BYTES + 1));
   assert.equal(result.success, false);
   if (!result.success) assert.equal(result.error.code, 'FILE_TOO_LARGE');
 });
-
-test('无效 schema 会在导入前被拒绝', () => {
-  const result = parseAndValidateBackup(JSON.stringify({
-    schemaVersion: 1,
-    exportedAt: '2026-01-01T00:00:00.000Z',
-    source: { extensionVersion: '1.0.0' },
-    data: { userProfile: null, llmConfig: { apiKey: 1 }, settings: null },
-  }));
-  assert.equal(result.success, false);
-});
-
-function installChromeStorageMock(initial: Record<string, unknown>) {
-  const values = { ...initial };
-  const previousChrome = Object.getOwnPropertyDescriptor(globalThis, 'chrome');
-  Object.defineProperty(globalThis, 'chrome', {
-    configurable: true,
-    value: {
-      runtime: {
-        getManifest: () => ({ version: '1.0.0' }),
-      },
-      storage: {
-        local: {
-          get: async (keys: string | string[]) => {
-            const selected = Array.isArray(keys) ? keys : [keys];
-            return Object.fromEntries(
-              selected.filter(key => Object.hasOwn(values, key)).map(key => [key, values[key]]),
-            );
-          },
-          set: async (entries: Record<string, unknown>) => Object.assign(values, entries),
-          remove: async (keys: string | string[]) => {
-            for (const key of Array.isArray(keys) ? keys : [keys]) delete values[key];
-          },
-        },
-      },
-    },
-  });
-  return {
-    values,
-    restore: () => {
-      if (previousChrome) Object.defineProperty(globalThis, 'chrome', previousChrome);
-      else delete (globalThis as { chrome?: unknown }).chrome;
-    },
-  };
-}
 
 test('导入旧备份时保留本地旧版兼容数据', async () => {
   const localData: BackupData = {
@@ -296,7 +230,6 @@ test('导入旧备份时保留本地旧版兼容数据', async () => {
   delete legacyDocument.data.applicationRecords;
   const mock = installChromeStorageMock({
     userProfile: localData.userProfile,
-    llmConfig: localData.llmConfig,
     settings: localData.settings,
     applicationRecords: localData.applicationRecords,
   });
@@ -323,11 +256,9 @@ for (const retiredConfig of [
     const result = parseAndValidateBackup(JSON.stringify(legacyDocument));
     assert.ok(result.success);
     assert.equal('webdavConfig' in result.document, false);
-    assert.equal(result.document.data.llmConfig?.apiKey, 'sk-secret');
     const mock = installChromeStorageMock({});
     try {
       await StorageService.replaceBusinessData(result.document.data);
-      assert.equal(mock.values.llmConfig, result.document.data.llmConfig);
       assert.equal('webdavConfig' in mock.values, false);
       const exported = serializeBackup(createBackupDocument(await StorageService.getBackupData(), '1.3.1'));
       assert.doesNotMatch(exported, /webdavConfig|retired-secret/);
@@ -352,8 +283,32 @@ test('导出仅包含业务数据，不包含本地遗留同步凭据或状态',
     const parsed = parseAndValidateBackup(json);
     assert.ok(parsed.success);
     assert.equal(parsed.document.data.userProfile?.personal.name, '张三');
-    assert.equal(parsed.document.data.llmConfig?.apiKey, 'sk-secret');
   } finally {
     mock.restore();
   }
 });
+
+for (const [raw, code] of [['{', 'INVALID_JSON'], ['[]', 'INVALID_ROOT'], ['{}', 'MISSING_SCHEMA_VERSION'], ['{"schemaVersion":2}', 'UNSUPPORTED_FUTURE_VERSION']] as const) {
+  test(`拒绝无效备份：${code}`, () => { const parsed = parseAndValidateBackup(raw); assert(!parsed.success); assert.equal(parsed.error.code, code); });
+}
+
+for (const llmConfig of [{ apiKey: 'retired-api-key', baseUrl: 'https://example.com' }, { invalid: true }, null]) {
+  test('旧备份中的模型配置被忽略，重新导出不包含凭据', async () => {
+    const legacy = JSON.parse(validJson()); legacy.data.llmConfig = llmConfig;
+    legacy.data.settings.fieldRecognitionRules = 'retired-model-prompt';
+    const result = parseAndValidateBackup(JSON.stringify(legacy)); assert.ok(result.success);
+    assert.equal('llmConfig' in result.document.data, false);
+    assert.doesNotMatch(serializeBackup(result.document), /llmConfig|retired-api-key|retired-model-prompt/);
+    const mock = installChromeStorageMock({ llmConfig, settings: { locale: 'zh-CN', fieldRecognitionRules: 'retired', learnedFieldValues: { 'jobs.example': { old: { value: 'legacy cache' } } } }, fieldMatch_v4_test: { stale: true }, aiPageFill_v3_test: { stale: true }, userProfile: completeData.userProfile });
+    try {
+      await StorageService.removeRetiredData();
+      assert.equal('llmConfig' in mock.values, false);
+      assert.equal('fieldMatch_v4_test' in mock.values, false);
+      assert.equal('aiPageFill_v3_test' in mock.values, false);
+      assert.deepEqual(mock.values.settings, { locale: 'zh-CN' });
+      assert.equal(mock.values.userProfile, completeData.userProfile);
+      await StorageService.replaceBusinessData(result.document.data);
+      assert.equal('llmConfig' in mock.values, false);
+    } finally { mock.restore(); }
+  });
+}

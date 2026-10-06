@@ -1,13 +1,11 @@
-import { expandUdTreeOptions, supportsUdTreeSelect } from './udTreeSelectAdapter.ts';
 import { matchSupplementDefinition } from '../shared/personalFields.ts';
 import { meaningForRule, profileForRuleBinding } from '../autofill/ruleDecisions.ts';
 import type { ProfileSnapshot } from '../autofill/contracts.ts';
 import type { DetectedField } from '../shared/types.ts';
-import { discoverControls, observeControl, getControlIdentity, getOptions, getEditableElement, getAssociatedPopups, bindAssociatedPopup, associateNearbyPopup, isVisibleControl, KNOWN_POPUP_SELECTOR, KNOWN_COMBOBOX_SELECTOR } from './controlObservation.ts';
+import { discoverControls, observeControl, getControlIdentity } from './controlObservation.ts';
 import { FieldMatcher } from '../utils/fieldMatcher.ts';
 import { findFormSectionHeading } from '../utils/formContext.ts';
 import { dateRangePart, bindFieldRecords, type RecordBinding } from './fieldBinding.ts';
-import { meaningCandidates } from '../autofill/fieldRegistry.ts';
 import { versionOf, type FieldDefinition, type FieldObservation } from '../autofill/contracts.ts';
 
 export function createPageObserver(registry: FieldDefinition[], region?: DOMRect, profile?: ProfileSnapshot) {
@@ -15,7 +13,6 @@ export function createPageObserver(registry: FieldDefinition[], region?: DOMRect
   let lastControls: HTMLElement[] = [];
   const cachedInfo = new Map<HTMLElement, CachedInfo>();
   const nodes = new Map<string, HTMLElement>();
-  const groupNodes = new Map<string, HTMLElement>();
   function observe(targetId?: string): FieldObservation[] {
     const controls = (targetId ? lastControls.filter(element => element.isConnected) : [...discoverControls(document), ...Array.from(document.querySelectorAll<HTMLInputElement>('input[type="file"]')).filter(element => !element.closest('[data-job-applymate-ui]'))]).filter(element => {
       if (!region) return true;
@@ -44,7 +41,7 @@ export function createPageObserver(registry: FieldDefinition[], region?: DOMRect
       const group = binding?.container || findGroup(element, controls);
       const fieldId = getControlIdentity(element);
       const groupId = getControlIdentity(group);
-      nodes.set(fieldId, element); groupNodes.set(groupId, group);
+      nodes.set(fieldId, element);
       let dateGroupId: string | undefined;
       if (endpoint) for (let parent = element.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
         if (controls.filter(control => parent.contains(control)).length === 2) { dateGroupId = getControlIdentity(parent); break; }
@@ -64,13 +61,13 @@ export function createPageObserver(registry: FieldDefinition[], region?: DOMRect
         kind: protectedControl ? 'unsupported' : element.matches('input[type=file]') ? 'file' : observation.kind, required: element.hasAttribute('required') || element.getAttribute('aria-required') === 'true',
         currentValue: protectedControl ? '' : element.matches('input[type=file]') ? Array.from((element as HTMLInputElement).files || []).map(file => file.name).join(', ') : observation.value, disabled: protectedControl || observation.disabled, options,
         optionsState: observation.optionsComplete ? 'complete' as const : options.length ? 'partial' as const : 'unread' as const,
-        ruleBinding, candidates: meaningCandidates(`${groupLabel} ${label}`, registry),
+        ruleBinding,
       };
       const { options: _options, ...meaningShape } = shape;
       return { ...data, meaningVersion: versionOf(meaningShape), snapshotVersion: versionOf(data) };
     });
   }
-  return { observe, nodes, groupNodes };
+  return { observe, nodes };
 }
 function findGroup(element: HTMLElement, controls: HTMLElement[]): HTMLElement {
   const explicit = element.closest<HTMLElement>('[data-record-id], [data-entry-id], .education-item, .experience-item, .project-item, [data-record], fieldset, [role="group"]');
@@ -83,42 +80,4 @@ function findGroup(element: HTMLElement, controls: HTMLElement[]): HTMLElement {
     if (peers.length || parent.matches('section, [data-section]')) return parent;
   }
   return element.closest('form') || document.body;
-}
-
-/** Opens/searches a control but never chooses an option by text similarity. */
-export async function readModelOptions(element: HTMLElement, query: string | undefined, shouldContinue: () => boolean) {
-  if (!shouldContinue() || !element.isConnected || observeControl(element).value) return;
-  const root = element.getRootNode() as Document | ShadowRoot;
-  const before = new Set(Array.from(root.querySelectorAll<HTMLElement>(KNOWN_POPUP_SELECTOR)).filter(isVisibleControl));
-  const editor = getEditableElement(element);
-  const trigger = element.querySelector<HTMLElement>('.ant-select-selector, .el-select__wrapper, .ud__select__selector') || editor || element;
-  associateNearbyPopup(element);
-  if (!getAssociatedPopups(element).some(isVisibleControl)) {
-    trigger.focus();
-    trigger.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-    trigger.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-    trigger.click();
-  }
-  for (let step = 0; step < 12 && shouldContinue(); step++) {
-    await new Promise(resolve => setTimeout(resolve, 50));
-    if (getAssociatedPopups(element).some(isVisibleControl) || associateNearbyPopup(element)) break;
-    const anchor = element.closest(KNOWN_COMBOBOX_SELECTOR) || element;
-    const rect = anchor.getBoundingClientRect();
-    const opened = Array.from(root.querySelectorAll<HTMLElement>(KNOWN_POPUP_SELECTOR)).filter(popup => !before.has(popup) && isVisibleControl(popup));
-    const nearby = opened.filter(popup => !opened.some(other => other !== popup && other.contains(popup))).filter(popup => {
-      const bounds = popup.getBoundingClientRect();
-      return bounds.left < rect.right && bounds.right > rect.left && Math.min(Math.abs(bounds.top - rect.bottom), Math.abs(bounds.bottom - rect.top)) < 240;
-    });
-    if (nearby.length === 1) bindAssociatedPopup(element, nearby[0]);
-  }
-  for (let step = 0; step < 24 && shouldContinue(); step++) {
-    if (getOptions(element).length && getAssociatedPopups(element).every(popup => popup.getAttribute('aria-busy') !== 'true')) break;
-    await new Promise(resolve => setTimeout(resolve, 50));
-  }
-  if (shouldContinue() && supportsUdTreeSelect(element)) await expandUdTreeOptions(element, shouldContinue);
-  if (shouldContinue() && query && editor && !editor.readOnly && !editor.disabled && !editor.value && getAssociatedPopups(element).length) {
-    Object.getOwnPropertyDescriptor(editor.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, 'value')?.set?.call(editor, query);
-    editor.dispatchEvent(new Event('input', { bubbles: true }));
-    await new Promise(resolve => setTimeout(resolve, 400));
-  }
 }

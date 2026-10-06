@@ -14,7 +14,6 @@ function Summary({ summary }: { summary: BackupSummary }) {
       <div><dt>来源版本</dt><dd>{summary.extensionVersion}</dd></div>
       <div><dt>个人信息</dt><dd>{summary.hasUserProfile ? '包含' : '不包含'}</dd></div>
       <div><dt>简历原文件</dt><dd>{summary.hasResumeFile ? '包含' : '不包含'}</dd></div>
-      <div><dt>AI 配置 / API Key</dt><dd>{summary.hasLLMConfig ? (summary.hasApiKey ? '包含（含 Key）' : '包含') : '不包含'}</dd></div>
     </dl>
   );
 }
@@ -99,7 +98,7 @@ export function DataBackupSettings({ onDataChanged }: Props) {
         <div className="data-section-heading">
           <div>
             <h2 className="settings-section-title">本地 JSON 备份</h2>
-            <p className="settings-description">导入或导出个人资料、简历原文件、AI 配置和通用设置。</p>
+            <p className="settings-description">导入或导出个人资料、简历原文件和通用设置。</p>
           </div>
           <div className="data-heading-actions">
             <button
@@ -123,7 +122,7 @@ export function DataBackupSettings({ onDataChanged }: Props) {
         </div>
 
         <div className="sensitive-warning" role="note">
-          备份为明文 JSON，包含完整个人信息、简历原文件、AI API Key。请妥善保管，不要发送给他人。
+          备份为明文 JSON，包含完整个人信息、简历原文件。请妥善保管，不要发送给他人。
         </div>
 
         {importSummary && (
@@ -144,7 +143,7 @@ export function DataBackupSettings({ onDataChanged }: Props) {
         <div className="confirm-layer" role="dialog" aria-modal="true" aria-labelledby="import-confirm-title">
           <div className="confirm-dialog">
             <h3 id="import-confirm-title">确认覆盖本地数据？</h3>
-            <p>导入会整体覆盖当前个人资料、简历、AI 配置和通用设置。此操作不能撤销。</p>
+            <p>导入会整体覆盖当前个人资料、简历和通用设置。此操作不能撤销。</p>
             <div className="backup-actions">
               <button className="btn btn-secondary" onClick={() => setConfirmingImport(false)}>取消</button>
               <button className="btn btn-primary" onClick={importBackup} disabled={busy !== null}>

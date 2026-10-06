@@ -27,8 +27,8 @@ test('invented facts, duplicate decisions, wrong records and writes to preserved
   const prefix = request.fields.find(field => field.fieldId === 'prefix')!;
   assert.equal(scoreCase(sample, 'complete', request, [{ ...name, fieldId: prefix.fieldId }]).incorrectAttempts, 1);
 });
-test('a manual answer with the right fact is still not an automatic prepared binding', () => {
+test('a missing-data decision is not an automatic prepared binding', () => {
   const request = prepareCase(sample, profile);
   const name = rulePredictions(request).find(decision => decision.meaningId === 'personal.name')!;
-  assert.equal(scoreCase(sample, 'complete', request, [{ ...name, nextAction: 'manual' }]).correctPrepared, 0);
+  assert.equal(scoreCase(sample, 'complete', request, [{ ...name, nextAction: 'requestFact' }]).correctPrepared, 0);
 });

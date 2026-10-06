@@ -37,7 +37,7 @@ const SECTION_RULES: Array<[RegExp, SectionKind]> = [
   [/^(?:自我评价|个人评价|自我介绍|个人总结|自我总结)$/, 'selfEvaluation'],
   [/^(?:专业技能|技能特长|技能清单|个人技能|IT技能|专业能力|技能)$/i, 'skills'],
   [/^(?:教育经历|教育背景|学历|学习经历|教育情况)$/, 'education'],
-  [/^(?:项目经历|项目经验|项目实践|科研经历|研究经历)$/, 'project'],
+  [/^(?:项目经历|项目经验|项目实践|科研经历|研究经历|项目研究(?:Project)?)$/i, 'project'],
   [/^(?:实习经历|实习经验|工作经历|工作经验|职业经历|实践经历|工作履历)$/, 'experience'],
   [/^(?:校园经历|在校经历|校内经历|学生工作|社团经历|社会实践)$/, 'campus'],
   [/^(?:获奖(?:情况|经历)?|获奖与荣誉|获奖与论文|荣誉奖项|奖励荣誉|奖学金)$/, 'award'],
@@ -530,7 +530,8 @@ export class NLPHelper {
    */
   static extractUnlabeledFields(text: string, headLines = 12): Partial<PersonalInfo> {
     const result: Partial<PersonalInfo> = {};
-    const head = text.split('\n').slice(0, headLines).join('\n');
+    const head = this.splitSections(text).filter(section => section.kind === 'basic')
+      .flatMap(section => section.lines).slice(0, headLines).join('\n');
 
     const politicalMatch = head.match(
       /(中共党员|中共预备党员|预备党员|共青团员|中共党员\(预备\)|党员|团员|群众|民主党派|无党派)/
@@ -538,7 +539,8 @@ export class NLPHelper {
     if (politicalMatch) result.politicalStatus = politicalMatch[1];
 
     // 出生日期：2002年5月 / 2002.05 / 2002-05；排除明显是学历起止年份的范围
-    const birthMatch = head.match(/(?<!\d)(19[5-9]\d|20[0-2]\d)\s*[年.\-/]\s*(\d{1,2})\s*月?(?!\s*[-~—–至])/);
+    const birthHeader = head.split('\n').filter(line => (line.match(/(?:19|20)\d{2}\s*[年.\-/]\s*\d{1,2}(?!\d)/g) || []).length === 1).join('\n');
+    const birthMatch = birthHeader.match(/(?<!\d)(19[5-9]\d|20[0-2]\d)\s*[年.\-/]\s*(\d{1,2})(?!\d)\s*月?(?!\s*[-~—–至])/);
     if (birthMatch) {
       result.birthDate = `${birthMatch[1]}-${birthMatch[2].padStart(2, '0')}`;
     }
@@ -572,7 +574,7 @@ export class NLPHelper {
       line.length <= 6 &&
       !sectionWords.test(line) &&
       !fieldValues.test(line) &&
-      !/[:：@\d]/.test(line)
+      /^[\p{Script=Han}·]{2,6}$/u.test(line)
     );
   }
 
@@ -665,7 +667,7 @@ export class NLPHelper {
 
     if (skills.length === 0) skills = this.extractSkills(text);
 
-    // Without a model, keep original section text rather than guessing record details.
+    // Keep original section text rather than guessing record details.
     const additionalInfo = sections.filter(section => ['award', 'publication', 'language', 'certification', 'patent', 'campus'].includes(section.kind) && section.lines.length).map((section, index) => ({ id: `supplement-${index}`, name: section.title, content: section.lines.join('\n') }));
     return {
       ...(additionalInfo.length ? { additionalInfo } : {}),
@@ -680,7 +682,7 @@ export class NLPHelper {
 
   /** 从标题或靠前的短行推断姓名 */
   private static inferName(text: string): string {
-    const lines = text.split('\n')
+    const lines = this.splitSections(text).filter(section => section.kind === 'basic').flatMap(section => section.lines)
       .map(l => l.replace(/^#+\s*/, '').trim())
       .filter(l => l.length > 0);
 

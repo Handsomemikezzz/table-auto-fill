@@ -1,7 +1,6 @@
 import type { FieldDecision, FieldObservation, FillContextData, MeaningCorrection, ProfileSnapshot } from './contracts.ts';
 import type { UserProfile } from '../shared/types.ts';
 
-export const RULE_PROVIDER_ID = 'local-rules-v1';
 const renamedFields: Record<string, string> = {
   educationStartDate: 'education.startDate', graduationDate: 'education.endDate',
   startDate: 'experience.startDate', endDate: 'experience.endDate', description: 'experience.description',
@@ -35,16 +34,22 @@ export function profileForRuleBinding(snapshot: ProfileSnapshot): UserProfile {
   return profile;
 }
 export function buildRuleDecisions(fields: FieldObservation[], context: FillContextData, corrections: MeaningCorrection[] = []): FieldDecision[] {
-  return fields.flatMap(field => {
-    if (!field.ruleBinding || field.ruleBinding.confidence < 0.9 || field.disabled || field.kind === 'unsupported') return [];
-    const { meaningId, recordId } = field.ruleBinding;
-    const correction = corrections.filter(item => item.enabled && item.signature === field.signature && (!field.origin || item.origin === field.origin) && item.profileVersion === context.profile.version && item.registryVersion === context.registryVersion).at(-1);
-    if (correction && (correction.meaningId !== meaningId || (correction.recordId && correction.recordId !== recordId))) return [];
-    const facts = context.profile.facts.filter(fact => fact.meaningId === meaningId && fact.recordId === recordId && fact.subject === (context.registry.find(def => def.id === meaningId)?.subject || 'self') && !fact.conflict);
+  return fields.flatMap((field): FieldDecision[] => {
+    if (field.disabled || field.kind === 'unsupported') return [];
+    const correction = corrections.filter(item => item.enabled && item.confirmedAt && item.signature === field.signature
+      && (!field.origin || item.origin === field.origin) && item.profileVersion === context.profile.version
+      && item.registryVersion === context.registryVersion).at(-1);
+    const binding = correction || field.resolvedBinding || (field.ruleBinding && field.ruleBinding.confidence >= 0.9 ? field.ruleBinding : undefined);
+    if (!binding) return [];
+    const { meaningId, recordId } = binding;
+    const facts = context.profile.facts.filter(fact => fact.meaningId === meaningId && fact.recordId === recordId && fact.subject === (context.registry.find(def => def.id === meaningId)?.subject || 'self'));
+    if (facts.length === 0) return [{ decisionId: crypto.randomUUID(), fieldId: field.fieldId, snapshotVersion: field.snapshotVersion,
+      meaningId, recordId, nextAction: 'requestFact' as const,
+      registryVersion: context.registryVersion, profileVersion: context.profile.version }];
     if (facts.length !== 1) return [];
     const fact = facts[0];
     return [{ decisionId: crypto.randomUUID(), fieldId: field.fieldId, snapshotVersion: field.snapshotVersion,
-      meaningId, subject: fact.subject, recordId, factId: fact.id, nextAction: 'write', dependencyIds: [], evidenceIds: ['local-rule-binding'],
-      modelId: RULE_PROVIDER_ID, registryVersion: context.registryVersion, profileVersion: context.profile.version }];
+      meaningId, subject: fact.subject, recordId, factId: fact.id, nextAction: 'write',
+      registryVersion: context.registryVersion, profileVersion: context.profile.version }];
   });
 }

@@ -3,20 +3,18 @@ import { createResumeProfileSnapshot } from '../shared/resumes.ts';
 import { publicationTitleKey } from '../parsers/researchPublications.ts';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { UserProfile, ParsedResumeData } from '../shared/types.ts';
-import type { ProfileImportChange } from '../autofill/profileImport.ts';
-import { applyProfileImportDraft } from '../autofill/profileImport.ts';
 import { createPrefilledReview, getReviewWarnings, REVIEW_PERSONAL_FIELDS } from '../autofill/resumeReview.ts';
 
 export interface ProfileImportDraftProps {
-  parsedData?: ParsedResumeData; fileName?: string; changes?: ProfileImportChange[]; currentProfile?: UserProfile;
+  parsedData: ParsedResumeData; fileName?: string; currentProfile?: UserProfile;
   initialDraft?: UserProfile; warnings?: string[]; rawText?: string; extractionMethod?: string;
   onApply: (updated: UserProfile, baseline?: UserProfile) => Promise<void>;
   onDismiss: (draft?: UserProfile) => void;
 }
 const empty = (): UserProfile => ({ personal: { name: '', phone: '', email: '', birthDate: '', gender: '' }, education: [], experience: [], projects: [], skills: [], certifications: [], customInformation: [] });
-export function ProfileImportDraft({ parsedData, fileName, changes, currentProfile, initialDraft, warnings = [], rawText, extractionMethod, onApply, onDismiss }: ProfileImportDraftProps) {
+export function ProfileImportDraft({ parsedData, fileName, currentProfile, initialDraft, warnings = [], rawText, extractionMethod, onApply, onDismiss }: ProfileImportDraftProps) {
   const [baseline] = useState(() => structuredClone(currentProfile || empty()));
-  const [draft, setDraft] = useState(() => initialDraft || (parsedData ? createPrefilledReview(baseline, parsedData) : changes ? applyProfileImportDraft(baseline, changes) : structuredClone(baseline)));
+  const [draft, setDraft] = useState(() => initialDraft || createPrefilledReview(baseline, parsedData));
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const differentName = Boolean(baseline.personal.name && parsedData?.personal?.name
     && baseline.personal.name.replace(/\s/g, '') !== parsedData.personal.name.replace(/\s/g, ''));

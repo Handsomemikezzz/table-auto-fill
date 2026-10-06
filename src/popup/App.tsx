@@ -50,7 +50,7 @@ export default function App() {
           <label className="resume-picker"><span>选择岗位资料</span><select aria-label="选择本次资料" value={sourceId} onChange={event => setSourceId(event.target.value)}><option value="default">通用资料</option>{library.filter(item => item.parsedProfile).map(item => <option key={item.id} value={item.id}>{item.category}｜{item.fileName}</option>)}</select></label>
           <button className="button button-secondary" disabled={!profile || busy} onClick={() => void fill(true)}>只填某一区域</button>
         </details>
-        <button className="button button-quiet" onClick={() => chrome.runtime.openOptionsPage()}>资料与模型设置</button>
+        <button className="button button-quiet" onClick={() => chrome.runtime.openOptionsPage()}>资料设置</button>
       </div>
       {error && <p role="alert">{error}</p>}
     </div>

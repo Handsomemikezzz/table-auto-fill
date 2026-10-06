@@ -1,13 +1,13 @@
 import { FormFiller } from './formFiller.ts';
 import { verifyControl, isAutomatedControlAction } from './fillEngine.ts';
 import { observeControl, discoverControls } from './controlObservation.ts';
-import { createPageObserver, readModelOptions } from './modelLedObservation.ts';
+import { createPageObserver } from './pageObservation.ts';
 import { createFillTaskPanel } from './fillTaskPanel.ts';
 import { FillSessionController } from '../autofill/fillSessionController.ts';
 import { createInfoOverlayController } from './infoOverlay.ts';
 import { createProfileSnapshot } from '../autofill/profileSnapshot.ts';
 import { getResumeLibrary } from '../shared/resumes.ts';
-import type { FillContextData, FieldObservation, FieldDecision } from '../autofill/contracts.ts';
+import type { FillContextData, FieldObservation } from '../autofill/contracts.ts';
 import type { FillOutcome } from '../shared/fillModel.ts';
 import type { Message, MessageResponse, UserProfile, FocusedFieldWriteResult } from '../shared/types.ts';
 
@@ -72,14 +72,8 @@ async function startFill(sourceId = 'default', attachmentId?: string | null, reg
     const context = result.data;
     session = new FillSessionController(context, {
       observe: () => bridge<FieldObservation[]>({ action: 'observe', sessionId, registry: context.registry, profile: context.profile, region: regionData }),
-      decide: async (fields, corrections, establishedBindings) => {
-        const response = await send<FieldDecision[]>({ type: 'DECIDE_FILL_FIELDS', payload: { sessionId, fields, corrections, establishedBindings } });
-        if (!response.success || !response.data) throw new Error(response.error || '暂时无法连接填写服务');
-        return response.data;
-      },
       execute: (field, decision, value, _continue, overwrite) => bridge<FillOutcome>({ action: 'execute', sessionId, field, decision, value, overwrite }),
       verify: (field, decision, value) => bridge<FillOutcome>({ action: 'verify', sessionId, field, decision, value }),
-      readOptions: (field, query) => bridge({ action: 'readOptions', sessionId, field, query }),
       cancel: () => { void send({ type: 'END_FILL_SESSION', payload: { sessionId } }); void bridge({ action: 'cancel', sessionId }); },
       update: () => panel.update(),
     });
@@ -134,10 +128,6 @@ async function localOperation(payload: Record<string, any>) {
   if (payload.action === 'locate') { element.scrollIntoView({ block: 'center', behavior: 'smooth' }); element.focus(); return; }
   const keepGoing = () => !localCancelled && localSessionId === payload.sessionId;
   if (!keepGoing()) return { status: 'cancelled', reason: '填写已停止' };
-  if (payload.action === 'readOptions') {
-    if (observer!.observe(payload.field.fieldId)[0]?.snapshotVersion !== payload.field.snapshotVersion) return;
-    return readModelOptions(element, payload.query, () => keepGoing() && !localUserEdits.has(element));
-  }
   const context = { semantic: payload.decision?.meaningId?.split('.').at(-1), optionRefs: payload.decision?.targetOptionIds, shouldContinue: keepGoing, overwrite: payload.overwrite === true };
   if (payload.action === 'verify' && element instanceof HTMLInputElement && element.type === 'file') return { status: element.files?.length === 1 && element.files[0].name === payload.value ? 'verified' : 'unverified', reason: '核对网页中的附件文件名' };
   if (payload.action === 'verify') return verifyControl(element, payload.value, { ...context, settleMs: 60 });
@@ -178,10 +168,7 @@ chrome.runtime.onMessage.addListener((message: Message, sender, respond) => {
       else void startFill(message.payload.sourceId, message.payload.attachmentId);
       respond({ success: true, data: { started: true } }); return false;
     case 'FILL_FORM':
-    case 'START_AI_PAGE_FILL':
       void startFill('default', message.payload?.resumeId); respond({ success: true, data: { started: true } }); return false;
-    case 'START_AI_REGION_FILL': selectRegion('default'); respond({ success: true }); return false;
-    case 'PREVIEW_FILL': respond({ success: true, data: { items: [], detectedCount: discoverControls(document).length } }); return false;
     case 'DETECT_FIELDS': respond({ success: true, data: { count: discoverControls(document).length } }); return false;
     case 'UNDO_LAST_FILL':
       if (starting || session?.busy) { respond({ success: false, error: '请先停止填写' }); return false; }

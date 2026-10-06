@@ -1,5 +1,5 @@
-import { PERSONAL_EXTRA_FIELDS } from '../shared/personalFields.ts';
-import type { PersonalInfo } from '../shared/types.ts';
+import { PERSONAL_EXTRA_FIELDS } from './personalFields.ts';
+import type { PersonalInfo } from './types.ts';
 
 export type BasicInfoField = {
   key: keyof PersonalInfo;

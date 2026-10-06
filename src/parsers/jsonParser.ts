@@ -8,7 +8,7 @@ import type { ParsedResumeData } from '../shared/types';
  *
  * 支持在线简历编辑器导出的 JSON（含 basic / education / experience /
  * projects / skillContent 等字段）。由于数据本身已结构化，直接映射即可，
- * 无需 LLM 或正则推断，准确率最高且不消耗 API 额度。
+ * 直接映射已提供的结构化资料，无需额外推断。
  */
 
 /** 富文本字段可能含 HTML 标签，转为纯文本 */

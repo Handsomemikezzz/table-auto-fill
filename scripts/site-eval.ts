@@ -1,7 +1,7 @@
 import type { FieldObservation, FieldDecision, DecisionRequest } from '../src/autofill/contracts.ts';
 import type { UserProfile } from '../src/shared/types.ts';
 import { FieldMatcher } from '../src/utils/fieldMatcher.ts';
-import { createFieldRegistry, registryVersion, meaningCandidates } from '../src/autofill/fieldRegistry.ts';
+import { createFieldRegistry, registryVersion } from '../src/autofill/fieldRegistry.ts';
 import { createProfileSnapshot } from '../src/autofill/profileSnapshot.ts';
 import { getPersonalAdditionalFields, matchSupplementDefinition } from '../src/shared/personalFields.ts';
 import { meaningForRule, buildRuleDecisions } from '../src/autofill/ruleDecisions.ts';
@@ -21,14 +21,14 @@ export function prepareCase(sample: EvalCase, profile: UserProfile, referenceDat
     const meaningId = matchSupplementDefinition(input.label, registry)?.id || meaningForRule(match.fieldType, { registry });
     const candidates = snapshot.facts.filter(fact => fact.meaningId === meaningId);
     // This descriptor-only layer cannot reconstruct DOM record grouping. Only a
-    // unique existing fact can bind; ambiguous records remain for model/manual review.
+    // unique existing fact can bind; ambiguous records remain for manual confirmation.
     const binding = meaningId && match.confidence >= 0.9 && (candidates.length <= 1)
       ? { meaningId, recordId: candidates[0]?.recordId, confidence: match.confidence } : undefined;
     return { fieldId: input.id, snapshotVersion: sample.id, frameId: '0', groupId: input.groupLabel, groupLabel: input.groupLabel,
       signature: `${sample.id}:${input.id}`, label: input.label, context: input.groupLabel, kind: input.kind,
       required: false, currentValue: input.currentValue, disabled: false,
       options: input.options.map((label, index) => ({ id: `${input.id}:option:${index}`, label })), optionsState: input.optionsState,
-      candidates: meaningCandidates(`${input.groupLabel} ${input.label}`, registry), ruleBinding: binding };
+      ruleBinding: binding };
   });
   return { fields, profile: snapshot, registry, registryVersion: registryVersion(registry), corrections: [] };
 }
@@ -42,11 +42,11 @@ export function scoreCase(sample: EvalCase, profileId: string, request: Decision
     if (!expected) throw new Error(`Missing annotation ${sample.id}/${input.id}/${profileId}`);
     const choices = decisions.filter(decision => decision.fieldId === input.id);
     const decision = choices.length === 1 ? choices[0] : undefined;
-    const writing = decision && ['write', 'select'].includes(decision.nextAction);
+    const writing = decision && decision.nextAction === 'write';
     const fact = request.profile.facts.find(fact => fact.id === decision?.factId);
     const valid = decision && !errors.has(input.id);
     const observation = request.fields.find(field => field.fieldId === input.id);
-    const attempted = choices.some(choice => ['write', 'select'].includes(choice.nextAction));
+    const attempted = choices.some(choice => choice.nextAction === 'write');
     const correctBinding = Boolean(writing && valid && fact && decision!.meaningId === expected.meaningId
       && fact.subject === 'self' && fact.recordId === (expected.recordId ?? undefined));
     const correct = expected.policy === 'preserve' ? Boolean(input.currentValue && !attempted)

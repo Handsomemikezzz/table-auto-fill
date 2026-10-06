@@ -1,20 +1,13 @@
-import { PROFILE_RECORD_COLLECTIONS, SUPPLEMENTAL_COLLECTIONS } from '../shared/profileCollections.ts';
-import { normalizeParsedResume } from '../parsers/resumeStructure.ts';
 import { recoverResumePublications } from '../parsers/researchPublications.ts';
-import { createProfileImportDraft } from '../autofill/profileImport.ts';
 import { bridgeFillPage } from './fillPageBridge.ts';
-import { beginFillSession, decideFillFields, endFillSession, getCorrections, changeCorrection, getExperiences, saveExperiences, changeExperience, isPageOrigin } from './fillSessions.ts';
+import { beginFillSession, endFillSession } from './fillSessions.ts';
 import { createProfileSnapshot, saveConfirmedFact, savePersonalField } from '../autofill/profileSnapshot.ts';
-import { validateFieldMappings, type GroundedMapping } from '../services/llm/fieldMapping.ts';
 import type {
   FocusedFieldWriteResult,
-  LearnedFieldValue,
   Message,
   MessageResponse,
   UserProfile,
   ParsedResumeData,
-  VisualRegionFillPayload,
-  VisualRegionFillRequestPayload,
 } from '../shared/types.ts';
 import { StorageService } from '../shared/storage.ts';
 import {
@@ -25,38 +18,8 @@ import {
 } from '../shared/backup.ts';
 import { parseResume, isStructuredType, parseStructuredResume } from '../parsers/index.ts';
 import { NLPHelper } from '../utils/nlpHelper.ts';
-import { LLMService } from '../services/llm/llmService.ts';
-import {
-  buildAnswerGenerationPrompt,
-  buildResumeParsingPrompt,
-  buildFieldMatchingPrompt,
-  buildSectionFillPrompt,
-} from '../services/llm/prompts.ts';
-import type { AIFillSectionPayload } from '../services/llm/prompts.ts';
-import type { LLMConfig } from '../services/llm/types.ts';
-import {
-  buildAIFillValueCacheKey,
-  buildFieldMatchingCacheKey,
-} from '../services/llm/fieldMatchingCache.ts';
-import {
-  getLearnedFieldsForDomain,
-  saveLearnedValueToProfile,
-  updateLearnedFieldStore,
-  type LearnedFieldStore,
-} from '../shared/learnedFields.ts';
-import {
-  DEFAULT_FIELD_RECOGNITION_RULES_MD,
-  getFieldRecognitionRules,
-  upsertFieldRecognitionHint,
-} from '../shared/fieldRecognitionRules.ts';
-import {
-  captureVisibleRegion,
-  handleVisualRegionFill,
-} from './visualRegionFill.ts';
-import { areEquivalentDates } from '../utils/dateValue.ts';
 import { ensureContentScriptForTab } from './contentScriptConnection.ts';
 import {
-  buildProfileForResume,
   createResumeProfileSnapshot,
   createResumeVariant,
   getResumeLibrary,
@@ -66,144 +29,11 @@ import {
 // Background Service Worker 入口
 console.log('Background service worker started');
 
-// Remove credentials and status left by the retired synchronization feature.
-void chrome.storage.local.remove(['webdavConfig', 'syncMetadata']).catch(error => {
-  console.error('Failed to remove retired sync settings:', error);
+void StorageService.removeRetiredData().catch(error => {
+  console.error('Failed to remove retired settings:', error);
 });
 
 let personalFieldSaveQueue: Promise<unknown> = Promise.resolve();
-const aiFillControllers = new Map<string, AbortController>();
-const AI_FIELD_TIMEOUT_MS = 25_000;
-const RESUME_PARSE_TIMEOUT_MS = 45_000;
-
-async function handleGetLearnedFieldValues(domain: string): Promise<MessageResponse> {
-  const settings = await StorageService.getSettings() || {};
-  const store = (settings.learnedFieldValues || {}) as LearnedFieldStore;
-  return { success: true, data: getLearnedFieldsForDomain(store, domain) };
-}
-
-async function handleSaveLearnedFieldValue(
-  domain: string,
-  entry: LearnedFieldValue,
-  options: { saveAsProfileInformation?: boolean; recognitionHint?: string } = {},
-): Promise<MessageResponse> {
-  const normalizedDomain = domain.trim().toLowerCase();
-  if (!normalizedDomain || !entry.signature.trim() || !entry.value.trim()) {
-    return { success: false, error: '学习字段信息不完整' };
-  }
-  const [settingsValue, storedProfile] = await Promise.all([
-    StorageService.getSettings(),
-    StorageService.getUserProfile(),
-  ]);
-  const settings = settingsValue || {};
-  let profile = storedProfile;
-  let savedProfilePath = entry.profilePath;
-
-  if (options.saveAsProfileInformation && profile) {
-    const saved = saveLearnedValueToProfile(
-      profile,
-      entry.fieldType,
-      entry.label,
-      entry.value.slice(0, 4000),
-    );
-    if (!await StorageService.saveUserProfile(saved.profile)) {
-      return { success: false, error: '答案已写入网页，但保存到个人资料失败' };
-    }
-    profile = saved.profile;
-    savedProfilePath = saved.profilePath;
-  }
-
-  const store = (settings.learnedFieldValues || {}) as LearnedFieldStore;
-  const profilePath = savedProfilePath || inferProfilePath(profile, entry.value);
-  const recordMatch = profilePath?.match(new RegExp(`^(${PROFILE_RECORD_COLLECTIONS.join('|')}|customInformation)(?:\\[(\\d+)\\]|\\.(\\d+))\\.`));
-  const recordCollection = recordMatch && (profile as unknown as Record<string, { id: string }[]> | undefined)?.[recordMatch[1]];
-  const profileRecordId = recordMatch && recordCollection ? recordCollection[Number(recordMatch[2] ?? recordMatch[3])]?.id : undefined;
-  const nextStore = updateLearnedFieldStore(store, normalizedDomain, {
-    signature: entry.signature,
-    label: entry.label.slice(0, 160),
-    value: entry.value.slice(0, 4000),
-    fieldType: entry.fieldType,
-    profilePath,
-    ...(profileRecordId ? { profileRecordId } : {}),
-    updatedAt: entry.updatedAt,
-  });
-  const recognitionHint = options.recognitionHint?.trim();
-  const fieldRecognitionRules = recognitionHint
-    ? upsertFieldRecognitionHint(
-        getFieldRecognitionRules(settings),
-        normalizedDomain,
-        entry.signature,
-        entry.label,
-        recognitionHint,
-      )
-    : settings.fieldRecognitionRules;
-  await StorageService.saveSettings({
-    ...settings,
-    learnedFieldValues: nextStore,
-    ...(typeof fieldRecognitionRules === 'string' ? { fieldRecognitionRules } : {}),
-  });
-  return {
-    success: true,
-    data: { savedToProfile: Boolean(options.saveAsProfileInformation && profile), savedProfilePath },
-  };
-}
-
-async function handleGetFieldRecognitionRules(): Promise<MessageResponse<{ markdown: string }>> {
-  const settings = await StorageService.getSettings();
-  return { success: true, data: { markdown: getFieldRecognitionRules(settings) } };
-}
-
-async function handleSaveFieldRecognitionRules(markdown: string): Promise<MessageResponse> {
-  const settings = await StorageService.getSettings() || {};
-  const normalized = markdown.trim().slice(0, 20_000) || DEFAULT_FIELD_RECOGNITION_RULES_MD;
-  await StorageService.saveSettings({ ...settings, fieldRecognitionRules: normalized });
-  return { success: true, data: { markdown: normalized } };
-}
-
-async function handleSaveFieldRecognitionHint(payload: {
-  domain: string;
-  signature: string;
-  label: string;
-  hint: string;
-}): Promise<MessageResponse> {
-  if (!payload.domain.trim() || !payload.signature.trim() || !payload.hint.trim()) {
-    return { success: false, error: '请先填写要告诉 AI 的识别纠错' };
-  }
-  const settings = await StorageService.getSettings() || {};
-  const markdown = upsertFieldRecognitionHint(
-    getFieldRecognitionRules(settings),
-    payload.domain,
-    payload.signature,
-    payload.label,
-    payload.hint,
-  );
-  await StorageService.saveSettings({ ...settings, fieldRecognitionRules: markdown });
-  return { success: true, data: { markdown } };
-}
-
-function inferProfilePath(profile: UserProfile | null, expected: string): string | undefined {
-  if (!profile || !expected.trim()) return undefined;
-  const target = expected.replace(/\s+/g, ' ').trim().toLowerCase();
-  const matches: string[] = [];
-  const visit = (value: unknown, path: string): void => {
-    if (typeof value === 'string') {
-      const normalized = value.replace(/\s+/g, ' ').trim().toLowerCase();
-      if (normalized === target || areEquivalentDates(value, expected)) matches.push(path);
-      return;
-    }
-    if (!value || typeof value !== 'object') return;
-    if (Array.isArray(value)) {
-      value.forEach((item, index) => visit(item, `${path}[${index}]`));
-      return;
-    }
-    for (const [key, child] of Object.entries(value)) {
-      if (['fileData', 'parsedText', 'rawText', 'resume', 'resumes'].includes(key)) continue;
-      visit(child, path ? `${path}.${key}` : key);
-    }
-  };
-  visit(profile, '');
-  return matches.length === 1 ? matches[0] : undefined;
-}
 
 // 监听消息
 chrome.runtime.onMessage.addListener(
@@ -238,30 +68,8 @@ export async function handleMessage(
       return { success: true, data: await bridgeFillPage(message.payload, sender) };
     case 'BEGIN_FILL_SESSION':
       return { success: true, data: await beginFillSession(message.payload, sender) };
-    case 'DECIDE_FILL_FIELDS':
-      return { success: true, data: await decideFillFields(message.payload, sender) };
     case 'END_FILL_SESSION':
       endFillSession(message.payload.sessionId, sender);
-      return { success: true };
-    case 'GET_CONTROL_EXPERIENCES':
-      return { success: true, data: await getExperiences() };
-    case 'SAVE_CONTROL_EXPERIENCES': {
-      if (!sender.url) return { success: false, error: '控件来源无效' };
-      const origins = await Promise.all([...new Set(message.payload.map(item => item.origin))].map(async origin => await isPageOrigin(origin, sender) ? origin : ''));
-      await saveExperiences(message.payload.filter(item => origins.includes(item.origin) && item.verifiedAt && ['write', 'select'].includes(item.action)).map(item => ({ id: item.id, origin: item.origin, signature: item.signature, registryVersion: item.registryVersion, profileVersion: item.profileVersion, adapterId: item.adapterId, action: item.action, modelId: item.modelId, verifiedAt: item.verifiedAt, enabled: item.enabled })));
-      return { success: true };
-    }
-    case 'UPDATE_CONTROL_EXPERIENCE':
-      await changeExperience(message.payload);
-      return { success: true };
-    case 'GET_MEANING_CORRECTIONS':
-      return { success: true, data: await getCorrections() };
-    case 'SAVE_MEANING_CORRECTION':
-      if (!message.payload.confirmedAt || !await isPageOrigin(message.payload.origin, sender)) return { success: false, error: '纠错作用范围无效' };
-      await changeCorrection(message.payload);
-      return { success: true };
-    case 'UPDATE_MEANING_CORRECTION':
-      await changeCorrection(message.payload);
       return { success: true };
     case 'SAVE_PERSONAL_FIELD': {
       const result = personalFieldSaveQueue.then(async () => {
@@ -290,24 +98,6 @@ export async function handleMessage(
     case 'SAVE_USER_PROFILE':
       return await handleSaveUserProfile(message.payload);
 
-    case 'GET_LEARNED_FIELD_VALUES':
-      return await handleGetLearnedFieldValues(message.payload.domain);
-
-    case 'SAVE_LEARNED_FIELD_VALUE':
-      return await handleSaveLearnedFieldValue(message.payload.domain, message.payload.entry, {
-        saveAsProfileInformation: message.payload.saveAsProfileInformation,
-        recognitionHint: message.payload.recognitionHint,
-      });
-
-    case 'GET_FIELD_RECOGNITION_RULES':
-      return await handleGetFieldRecognitionRules();
-
-    case 'SAVE_FIELD_RECOGNITION_RULES':
-      return await handleSaveFieldRecognitionRules(message.payload.markdown);
-
-    case 'SAVE_FIELD_RECOGNITION_HINT':
-      return await handleSaveFieldRecognitionHint(message.payload);
-
     case 'CANCEL_RESUME_IMPORT': {
       const request = resumeImportRequests.get(message.payload.requestId);
       if (request?.owner === importOwner(sender)) request.controller.abort();
@@ -324,27 +114,6 @@ export async function handleMessage(
         sender
       );
 
-    case 'GET_RESUME_DATA':
-      return await handleGetResumeData();
-
-    case 'GENERATE_ANSWER':
-      return await handleGenerateAnswer(message.payload);
-
-    case 'MATCH_FIELDS_LLM':
-      return await handleMatchFieldsLLM(message.payload);
-
-    case 'AI_FILL_SECTION':
-      return await handleAIFillSection(message.payload);
-
-    case 'AI_FILL_VISUAL_REGION':
-      return await handleVisualRegionFillRequest(message.payload, sender);
-
-    case 'CANCEL_AI_FILL':
-      return handleCancelAIFill(message.payload.requestId);
-
-    case 'WRITE_FOCUSED_FIELD':
-      return await handleWriteFocusedField(message.payload.tabId, message.payload.value);
-
     case 'WRITE_FOCUSED_FIELD_FROM_PAGE':
       return sender.tab?.id
         ? await handleWriteFocusedField(sender.tab.id, message.payload.value)
@@ -352,15 +121,6 @@ export async function handleMessage(
 
     case 'ENSURE_CONTENT_SCRIPT':
       return await ensureContentScriptForTab(message.payload.tabId);
-
-    case 'GET_LLM_CONFIG':
-      return await handleGetLLMConfig();
-
-    case 'SAVE_LLM_CONFIG':
-      return await handleSaveLLMConfig(message.payload);
-
-    case 'TEST_LLM_CONNECTION':
-      return await handleTestConnection(message.payload);
 
     case 'EXPORT_BACKUP':
       return await handleExportBackup();
@@ -421,178 +181,12 @@ async function handleWriteFocusedField(
   }
 }
 
-async function handleVisualRegionFillRequest(
-  payload: VisualRegionFillPayload | VisualRegionFillRequestPayload,
-  sender: chrome.runtime.MessageSender,
-): Promise<MessageResponse> {
-  const requestId = payload.requestId?.trim();
-  let controller: AbortController | undefined;
-  if (requestId) {
-    controller = new AbortController();
-    aiFillControllers.set(requestId, controller);
-  }
-
-  try {
-    if (isVisualRegionFillPayload(payload)) {
-      return await handleVisualRegionFill(payload, undefined, controller?.signal);
-    }
-
-    const windowId = sender.tab?.windowId;
-    if (typeof windowId !== 'number') {
-      return { success: false, error: '无法获取当前页面截图' };
-    }
-
-    const image = await captureVisibleRegion(windowId, payload.region);
-    if (controller?.signal.aborted) {
-      return { success: false, error: 'AI 补填已终止' };
-    }
-
-    const strictPayload: VisualRegionFillPayload = { ...payload, image };
-    return await handleVisualRegionFill(strictPayload, undefined, controller?.signal);
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      return { success: false, error: 'AI 补填已终止' };
-    }
-    throw error;
-  } finally {
-    if (requestId) {
-      aiFillControllers.delete(requestId);
-    }
-  }
-}
-
-function isVisualRegionFillPayload(
-  payload: VisualRegionFillPayload | VisualRegionFillRequestPayload,
-): payload is VisualRegionFillPayload {
-  return 'image' in payload && Boolean(payload.image?.base64 && payload.image?.mimeType);
-}
-
 function isRestrictedPage(url: string): boolean {
   return (
     /^(chrome|edge|about|chrome-extension|edge-extension):\/\//i.test(url) ||
     /^https:\/\/chromewebstore\.google\.com\//i.test(url) ||
     /^https:\/\/microsoftedge\.microsoft\.com\/addons\//i.test(url)
   );
-}
-
-async function handleAIFillSection(
-  payload: AIFillSectionPayload
-): Promise<MessageResponse<Record<string, GroundedMapping>>> {
-  const controller = new AbortController();
-  aiFillControllers.get(payload.requestId)?.abort();
-  aiFillControllers.set(payload.requestId, controller);
-  let timedOut = false;
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-
-  try {
-    const config = await StorageService.getLLMConfig();
-    if (!config?.apiKey) {
-      return { success: false, error: '请先在设置中配置 AI 服务' };
-    }
-
-    const [storedProfile, settings] = await Promise.all([
-      StorageService.getUserProfile(),
-      StorageService.getSettings(),
-    ]);
-    if (!storedProfile) {
-      return { success: false, error: '请先保存个人资料' };
-    }
-    const profile = buildProfileForResume(storedProfile, payload.resumeId);
-    const recognitionRules = getFieldRecognitionRules(settings);
-
-    const cacheField = payload.fields.length === 1 ? payload.fields[0] : null;
-    const cacheKey = cacheField
-      ? buildAIFillValueCacheKey(
-          payload.domain,
-          cacheField,
-          getAIFillProfileFingerprint(profile),
-          recognitionRules,
-        )
-      : '';
-    if (cacheKey && cacheField) {
-      const cached = (await chrome.storage.local.get(cacheKey))[cacheKey];
-      if (cached && typeof cached === 'object') {
-        const mappings = normalizeAIFillMappings(
-          { [String(cacheField.index)]: cached },
-          payload,
-          profile,
-        );
-        if (Object.keys(mappings).length > 0) {
-          return { success: true, data: mappings };
-        }
-        await chrome.storage.local.remove(cacheKey);
-      }
-    }
-
-    const llm = new LLMService(config);
-    const { system, user } = buildSectionFillPrompt(payload, profile, recognitionRules);
-    timeoutId = setTimeout(() => {
-      timedOut = true;
-      controller.abort();
-    }, AI_FIELD_TIMEOUT_MS);
-    const result = await llm.chat([
-      { role: 'system', content: system },
-      { role: 'user', content: user },
-    ], controller.signal, { temperature: 0 });
-
-    let jsonStr = result.content.trim();
-    if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-    }
-    const rawMappings = JSON.parse(jsonStr) as Record<string, unknown>;
-    const mappings = normalizeAIFillMappings(rawMappings, payload, profile);
-    if (cacheKey && cacheField) {
-      const value = mappings[String(cacheField.index)];
-      if (value) await chrome.storage.local.set({ [cacheKey]: value });
-    }
-
-    return { success: true, data: mappings };
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      return {
-        success: false,
-        error: timedOut
-          ? '当前字段组的 AI 请求超过 25 秒，已保留已填写内容'
-          : 'AI 补填已终止，已填写内容会保留',
-      };
-    }
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'AI 补填失败',
-    };
-  } finally {
-    if (timeoutId) clearTimeout(timeoutId);
-    if (aiFillControllers.get(payload.requestId) === controller) {
-      aiFillControllers.delete(payload.requestId);
-    }
-  }
-}
-
-function normalizeAIFillMappings(rawMappings: Record<string, unknown>, payload: AIFillSectionPayload, profile: UserProfile): Record<string, GroundedMapping> {
-  return validateFieldMappings(rawMappings, payload.fields, profile);
-}
-
-function getAIFillProfileFingerprint(profile: UserProfile): string {
-  return JSON.stringify({
-    personal: profile.personal,
-    education: profile.education,
-    experience: profile.experience,
-    projects: profile.projects,
-    skills: profile.skills,
-    ...Object.fromEntries(SUPPLEMENTAL_COLLECTIONS.map(collection => [collection, profile[collection] || []])),
-    customInformation: profile.customInformation,
-  });
-}
-
-function handleCancelAIFill(requestId: string): MessageResponse {
-  const controller = aiFillControllers.get(requestId);
-  if (!controller) {
-    return { success: true, data: { cancelled: false } };
-  }
-
-  controller.abort();
-  aiFillControllers.delete(requestId);
-  return { success: true, data: { cancelled: true } };
 }
 
 // 获取用户资料
@@ -655,42 +249,14 @@ async function handleParseResume(
     assertActive();
     if (!rawText.trim()) throw new Error('没有识别到文字，请上传更清晰的图片或可读取的简历');
     let parsedData: ParsedResumeData;
-    let parseMethod: 'structured' | 'llm' | 'regex' = 'regex';
-    let llmError: string | undefined;
+    let parseMethod: 'structured' | 'regex' = 'regex';
 
     if (isStructuredType(fileType)) {
-      // JSON 简历本身已结构化，直接映射，避免 LLM 二次推断带来的误差
+      // JSON 简历直接映射；其他格式使用本地规则整理。
       parsedData = parseStructuredResume(rawText);
       parseMethod = 'structured';
     } else {
-      const llmConfig = await StorageService.getLLMConfig();
-      if (llmConfig?.baseUrl?.trim() && llmConfig.model?.trim() && (llmConfig.apiKey || llmConfig.provider === 'custom')) {
-        const controller = new AbortController();
-        const cancelModel = () => controller.abort();
-        requestController.signal.addEventListener('abort', cancelModel, { once: true });
-        let timedOut = false;
-        const timeoutId = setTimeout(() => {
-          timedOut = true;
-          controller.abort();
-        }, RESUME_PARSE_TIMEOUT_MS);
-        try {
-          parsedData = await parseResumeWithLLM(rawText, llmConfig, controller.signal);
-          parseMethod = 'llm';
-        } catch (error) {
-          // 静默回退会让用户以为 AI 生效了，这里记下原因并回报给界面
-          llmError = timedOut
-            ? 'AI 简历解析超过 45 秒，已自动停止并改用本地规则'
-            : error instanceof Error ? error.message : String(error);
-          if (requestController.signal.aborted && !timedOut) throw new Error('已停止简历识别');
-          console.warn('LLM resume parsing failed, falling back to regex:', error);
-          parsedData = NLPHelper.parseResumeText(rawText);
-        } finally {
-          clearTimeout(timeoutId);
-          requestController.signal.removeEventListener('abort', cancelModel);
-        }
-      } else {
-        parsedData = NLPHelper.parseResumeText(rawText);
-      }
+      parsedData = NLPHelper.parseResumeText(rawText);
     }
 
     assertActive();
@@ -737,10 +303,8 @@ async function handleParseResume(
       data: {
         parsedData,
         resumeId: resume.id,
-        importDraft: createProfileImportDraft(baseProfile, parsedData),
         rawText,
-        parseMethod,
-        llmError
+        parseMethod
       }
     };
   } catch (error) {
@@ -750,168 +314,6 @@ async function handleParseResume(
       error: error instanceof Error ? error.message : 'Failed to parse resume'
     };
   } finally { if (requestId) resumeImportRequests.delete(requestId); }
-}
-
-// 获取简历数据
-async function handleGetResumeData(): Promise<MessageResponse> {
-  try {
-    const profile = await StorageService.getUserProfile();
-    return {
-      success: true,
-      data: profile?.resume || null
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to get resume data'
-    };
-  }
-}
-
-// LLM 简历解析
-async function parseResumeWithLLM(
-  rawText: string,
-  config: LLMConfig,
-  signal?: AbortSignal,
-): Promise<ParsedResumeData> {
-  const llm = new LLMService(config);
-  const { system, user } = buildResumeParsingPrompt(rawText);
-
-  const result = await llm.chat([
-    { role: 'system', content: system },
-    { role: 'user', content: user },
-  ], signal, { temperature: 0 });
-
-  let jsonStr = result.content.trim();
-  if (jsonStr.startsWith('```')) {
-    jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-  }
-
-  return normalizeParsedResume(JSON.parse(jsonStr), rawText);
-}
-
-// AI 生成开放性问题回答
-async function handleGenerateAnswer(
-  payload: { questionText: string; context?: string; fieldMaxLength?: number; language?: 'zh' | 'en' }
-): Promise<MessageResponse> {
-  try {
-    const config = await StorageService.getLLMConfig();
-    if (!config?.apiKey) {
-      return { success: false, error: '请先在设置中配置AI服务' };
-    }
-
-    const profile = await StorageService.getUserProfile();
-    if (!profile) {
-      return { success: false, error: '请先填写个人信息' };
-    }
-
-    const llm = new LLMService(config);
-    const { system, user } = buildAnswerGenerationPrompt(payload, profile);
-
-    const result = await llm.chat([
-      { role: 'system', content: system },
-      { role: 'user', content: user },
-    ]);
-
-    return { success: true, data: { answer: result.content } };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'AI生成失败',
-    };
-  }
-}
-
-// LLM 语义字段匹配
-async function handleMatchFieldsLLM(
-  payload: { fields: Array<{ index: number; name: string; id: string; placeholder: string; labelText: string; type: string; contextText?: string }>; domain: string }
-): Promise<MessageResponse> {
-  try {
-    const [config, settings] = await Promise.all([
-      StorageService.getLLMConfig(),
-      StorageService.getSettings(),
-    ]);
-    if (!config?.apiKey) {
-      return { success: false, error: 'LLM not configured' };
-    }
-    const recognitionRules = getFieldRecognitionRules(settings);
-    const cacheKey = buildFieldMatchingCacheKey(payload.domain, payload.fields, recognitionRules);
-    const cached = await chrome.storage.local.get(cacheKey);
-    if (cached[cacheKey]) {
-      const cachedResult = cached[cacheKey] as Record<string, string>;
-      const allCovered = payload.fields.every(f => f.index.toString() in cachedResult);
-      if (allCovered) {
-        return { success: true, data: cachedResult };
-      }
-    }
-
-    const llm = new LLMService(config);
-    const { system, user } = buildFieldMatchingPrompt(payload.fields, recognitionRules);
-
-    const result = await llm.chat([
-      { role: 'system', content: system },
-      { role: 'user', content: user },
-    ], undefined, { temperature: 0 });
-
-    let jsonStr = result.content.trim();
-    if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-    }
-    const rawMappings: Record<string, unknown> = JSON.parse(jsonStr);
-    const validIndexes = new Set(payload.fields.map(field => String(field.index)));
-    const validFieldTypes = new Set([
-      'name', 'gender', 'birthDate', 'phone', 'email', 'wechat', 'idCard', 'politicalStatus',
-      'school', 'college', 'educationType', 'major', 'majorCategory', 'degree', 'academicDegree', 'gpa',
-      'selfEvaluation', 'educationStartDate', 'graduationDate', 'company',
-      'position', 'startDate', 'endDate', 'description', 'projectName',
-      'projectRole', 'projectStartDate', 'projectEndDate', 'projectDescription',
-      'projectAchievements', 'projectTechnologies', 'skills', 'resumeFile', 'unknown',
-    ]);
-    const mappings: Record<string, string> = {};
-    for (const [index, fieldType] of Object.entries(rawMappings)) {
-      if (validIndexes.has(index) && typeof fieldType === 'string' && validFieldTypes.has(fieldType)) {
-        mappings[index] = fieldType;
-      }
-    }
-
-    await chrome.storage.local.set({ [cacheKey]: mappings });
-
-    return { success: true, data: mappings };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : '字段匹配失败',
-    };
-  }
-}
-
-// 获取 LLM 配置
-async function handleGetLLMConfig(): Promise<MessageResponse> {
-  try {
-    const config = await StorageService.getLLMConfig();
-    return { success: true, data: config };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to get LLM config',
-    };
-  }
-}
-
-// 保存 LLM 配置
-async function handleSaveLLMConfig(config: LLMConfig): Promise<MessageResponse> {
-  try {
-    const success = await StorageService.saveLLMConfig(config);
-    return {
-      success,
-      data: success ? { localSaved: true } : undefined,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to save LLM config',
-    };
-  }
 }
 
 function backupFilename(date = new Date()): string {
@@ -954,33 +356,6 @@ async function handleImportBackup(json: string): Promise<MessageResponse> {
   };
 }
 
-// 测试 LLM 连接
-// payload 为界面上当前填写的配置；缺省时回退到已保存的配置
-async function handleTestConnection(payload?: LLMConfig | null): Promise<MessageResponse> {
-  try {
-    const config = payload ?? await StorageService.getLLMConfig();
-    if (!config?.apiKey?.trim() && config?.provider !== 'custom') {
-      return { success: false, error: '请先填写 API Key' };
-    }
-    if (!config.baseUrl?.trim()) {
-      return { success: false, error: '请先填写 API 地址' };
-    }
-    if (!config.model?.trim()) {
-      return { success: false, error: '请先填写模型名称' };
-    }
-
-    const llm = new LLMService(config);
-    await llm.testConnection();
-    return { success: true };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : '连接测试失败',
-    };
-  }
-}
-
-// 监听安装事件
 chrome.runtime.onInstalled.addListener((details) => {
   console.log('Extension installed:', details.reason);
 

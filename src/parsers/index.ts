@@ -6,7 +6,7 @@ import { parseTXT } from './txtParser.ts';
 import { parseResumeJSON } from './jsonParser.ts';
 import type { ParsedResumeData } from '../shared/types';
 
-/** JSON 简历自带结构，无需再经 LLM/正则推断 */
+/** JSON 简历自带结构，无需再经规则推断 */
 export function isStructuredType(fileType: string): boolean {
   return fileType.toLowerCase().replace('.', '') === 'json';
 }

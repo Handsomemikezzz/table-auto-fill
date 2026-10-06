@@ -595,7 +595,6 @@ export function createFillTaskPanel(
     const summaryText = session.phase !== 'complete' && session.phase !== 'stopped'
       ? (session.phase === 'understanding' ? '正在理解表单...'
         : session.phase === 'rules' ? '正在快速填写...'
-        : session.phase === 'matching' ? 'AI 补充匹配中...'
         : '正在填写并检查...')
       : `网页已填写 ${verifiedCount} 项 · ${todoCount} 项待处理`;
 
@@ -737,7 +736,6 @@ export function createFillTaskPanel(
         subject: i.decision?.subject,
         factId: i.decision?.factId,
         recordId: i.decision?.recordId,
-        modelId: i.decision?.modelId,
         profileVersion: i.decision?.profileVersion,
         registryVersion: i.decision?.registryVersion,
         status: i.status,
@@ -1493,7 +1491,6 @@ export function createFillTaskPanel(
           sourceCollection: 'personal',
           subject: 'self',
           valueType: 'text',
-          allowedTransformations: [],
           scope: 'builtin',
           version: 1,
           provenance: 'default',

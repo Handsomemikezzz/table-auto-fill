@@ -58,14 +58,14 @@ export function Fixture({ scenario }: { scenario: string }) {
   return <main>
     <h1>本地表单回归：{scenario}</h1>
     <form onSubmit={event => event.preventDefault()}>
-      {['react-text', 'rollback', 'user-edit', 'existing-text', 'linked', 'ai-cancel', 'personal-extra'].includes(scenario) && text('name', '姓名')}
-      {['linked', 'ai-cancel'].includes(scenario) && text('email', '邮箱', 'email')}
+      {['react-text', 'rollback', 'user-edit', 'existing-text', 'linked', 'fill-cancel', 'personal-extra'].includes(scenario) && text('name', '姓名')}
+      {['linked', 'fill-cancel'].includes(scenario) && text('email', '邮箱', 'email')}
       {scenario === 'personal-extra' && <>
         {text('age', '年龄', 'number')}{text('portfolioUrl', '作品集链接', 'url')}
         {text('preferredCities', '意向城市')}{text('languageSkills', '语言能力')}
         <fieldset><legend>推荐方式*</legend>{['内推', '大使推荐'].map((value, index) => <label key={value}><input type="radio" id={`referral-${index}`} name="referral" value={value} checked={state.referral === value} onChange={() => update('referral', value)} />{value}</label>)}</fieldset>
       </>}
-      {scenario === 'ai-cancel' && <label>上传简历<input id="resume" type="file" accept=".pdf" /></label>}
+      {scenario === 'fill-cancel' && <label>上传简历<input id="resume" type="file" accept=".pdf" /></label>}
       {scenario.startsWith('select-') && <div className="field">
         <label htmlFor="gender">性别</label>
         <select id="gender" name="gender" value={state.gender ?? ''}
@@ -224,10 +224,10 @@ const fixture = {
     return getControlValue(document.querySelector<HTMLElement>(selector)!);
   },
   async diagnose() {
-    const { FormDetector } = await import('../../src/content/formDetector.ts');
-    const detector = new FormDetector();
-    const detected = detector.detectFields().map(field => ({ id: field.element.id, fieldType: field.fieldType, confidence: field.confidence }));
-    return { detected, unmatched: detector.getUnmatchedFields().map(field => ({ id: field.element.id, identifiers: field.identifiers })), observations: await fixture.observe() };
+    const { createPageObserver } = await import('../../src/content/pageObservation.ts');
+    const { createFieldRegistry } = await import('../../src/autofill/fieldRegistry.ts');
+    const observer = createPageObserver(createFieldRegistry());
+    return { fields: observer.observe(), observations: await fixture.observe() };
   },
   async beginFiller() {
     const { FormFiller } = await import('../../src/content/formFiller.ts');
@@ -236,11 +236,8 @@ const fixture = {
   },
   async fillViaFiller(selector: string, value: string) {
     if (!sessionFiller) throw new Error('Missing fixture fill session');
-    return sessionFiller.fillElementValues([{ element: document.querySelector<HTMLElement>(selector)!, value }]);
-  },
-  async revalidateFiller() {
-    const count = await sessionFiller!.revalidate();
-    return { count, failures: sessionFiller!.getLastFailures().map(failure => ({ label: failure.label, status: failure.outcome?.status })) };
+    const outcome = await sessionFiller.executeDecision(document.querySelector<HTMLElement>(selector)!, value, {});
+    return Number(outcome.status === 'verified');
   },
   async undoFiller() { return sessionFiller!.undoLastFill(); },
 };

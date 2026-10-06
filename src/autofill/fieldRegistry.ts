@@ -15,20 +15,14 @@ export function createFieldRegistry(additionalFacts: AdditionalFact[] = []): Fie
   const builtin = Object.entries(collections).flatMap(([collection, fields]) => Object.entries(fields).map(([key, label]): FieldDefinition => ({
     id: `${collection}.${key}`, label, subject: 'self', key, sourceCollection: collection,
     valueType: /date/i.test(key) ? 'date' : 'text', aliases: [...(collection === 'personal' ? PERSONAL_EXTRA_FIELDS.find(field => field.key === key)?.aliases || [label, key] : [label, key])],
-    allowedTransformations: /date/i.test(key) ? ['date-format'] : [], scope: 'builtin', version: 1, provenance: 'registry',
+    scope: 'builtin', version: 1, provenance: 'registry',
   })));
   const seen = new Set(builtin.map(def => def.id));
   for (const fact of additionalFacts) {
     if (seen.has(fact.meaningId)) continue;
     seen.add(fact.meaningId);
-    builtin.push({ id: fact.meaningId, label: fact.label, subject: fact.subject, key: fact.id, sourceCollection: 'additionalFacts', valueType: fact.valueType, aliases: [fact.label], allowedTransformations: fact.valueType === 'date' ? ['date-format'] : [], scope: 'user', version: 1, provenance: 'user-confirmed' });
+    builtin.push({ id: fact.meaningId, label: fact.label, subject: fact.subject, key: fact.id, sourceCollection: 'additionalFacts', valueType: fact.valueType, aliases: [fact.label], scope: 'user', version: 1, provenance: 'user-confirmed' });
   }
   return builtin;
 }
 export const registryVersion = (registry: FieldDefinition[]) => versionOf(registry);
-/** Ranking is evidence only; every definition remains available to the provider. */
-export function meaningCandidates(label: string, registry: FieldDefinition[]): string[] {
-  const ranked = [...registry].sort((a, b) => score(b) - score(a));
-  function score(def: FieldDefinition) { return def.aliases.reduce((n, alias) => n + (label.toLowerCase().includes(alias.toLowerCase()) ? alias.length : 0), 0); }
-  return [...ranked.filter(def => score(def) > 0).map(def => def.id), 'other', 'unknown'];
-}

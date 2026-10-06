@@ -1,6 +1,6 @@
 import type { UserProfile } from '../shared/types.ts';
-import { buildBasicInfoItems } from '../sidepanel/basicInfo.ts';
-import { isMissingInformationRecord } from '../shared/learnedFields.ts';
+import { buildBasicInfoItems } from '../shared/basicInfo.ts';
+import { isMissingInformationRecord } from '../shared/legacyCustomInformation.ts';
 import { getProfileRecords, PROFILE_RECORD_SECTIONS, SUPPLEMENTAL_COLLECTIONS } from '../shared/profileCollections.ts';
 
 const HOST_ID = 'job-applymate-info-overlay-host';

@@ -62,3 +62,15 @@ test('不把子串、额外约束、不同单位或日期精度误当成等价',
     ['本科', '本科（含专升本）'], ['1.0', '10'], ['2020', '2020-06'],
   ]) assert.equal(matchOptionLabel(desired, label), null);
 });
+
+
+test('布尔选择按可见标签处理反转编码，短答案不能推断额外资格', () => {
+  const result = resolveOption({ desired: '是', semantic: 'boolean', options: [
+    { id: 'yes', label: '是', rawValue: '0' }, { id: 'no', label: '否', rawValue: '1' },
+  ] });
+  assert.equal(result.status, 'matched');
+  if (result.status === 'matched') assert.equal(result.option.id, 'yes');
+  for (const label of ['统招全日制', '非全日制']) {
+    assert.equal(resolveOption({ desired: '全日制', semantic: 'educationType', options: [{ id: 'qualification', label }] }).status, 'not-found');
+  }
+});

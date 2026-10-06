@@ -22,10 +22,10 @@ test('npm test 使用仓库内受版本控制的 tsx 依赖，而不是 npx 临�
 
   assert.equal(typeof packageJson.scripts?.test, 'string');
   assert.doesNotMatch(packageJson.scripts!.test, /\bnpx\b/);
-  assert.match(packageJson.scripts!.test, /\bnpm run test:sidepanel\b/);
-  assert.equal(typeof packageJson.scripts?.['test:sidepanel'], 'string');
-  assert.match(packageJson.scripts!['test:sidepanel'], /\btsx\b/);
-  assert.doesNotMatch(packageJson.scripts!['test:sidepanel'], /\bnpx\b/);
+  assert.match(packageJson.scripts!.test, /\bnpm run test:profile\b/);
+  assert.equal(typeof packageJson.scripts?.['test:profile'], 'string');
+  assert.match(packageJson.scripts!['test:profile'], /\btsx\b/);
+  assert.doesNotMatch(packageJson.scripts!['test:profile'], /\bnpx\b/);
   assert.ok(packageJson.devDependencies?.tsx, 'package.json 应声明 tsx 为 devDependency');
   assert.equal(
     packageLock.packages?.['']?.devDependencies?.tsx,

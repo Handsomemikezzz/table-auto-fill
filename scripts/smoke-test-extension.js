@@ -1,517 +1,81 @@
-import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { findBrowserExecutable } from './browser-test-utils.js';
+import { resolve } from 'node:path';
+import { connectCdp, launchTestBrowser, waitFor } from './browser-test-utils.js';
 
-const projectRoot = join(fileURLToPath(new URL('.', import.meta.url)), '..');
-const extensionDir = join(projectRoot, 'dist');
-const browserPath = findBrowserExecutable();
-
+const networkRequests = [];
 const server = createServer((request, response) => {
+  if (request.method !== 'GET') { networkRequests.push(request.url); response.writeHead(410).end(); return; }
   response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-  if (request.url === '/frame') {
-    response.end('<!doctype html><html><body><label for="city">现居地</label><input id="city" name="currentAddress"></body></html>');
-    return;
-  }
-  response.end(`<!doctype html><html><head><title>Job ApplyMate smoke</title><style>button,input,select,strong,span{font-size:42px!important;line-height:3!important}</style></head><body>
-    <form><label for="name">姓名</label><input id="name" name="name" required>
-    <label for="email">邮箱</label><input id="email" name="email" type="email" required>
-    <label for="political-status">政治面貌</label><select id="political-status" name="political_status" required>
-      <option value="">请选择</option><option value="member">中共党员</option><option value="democratic">民主党派</option><option value="probationary">中共预备党员</option><option value="league">共青团员</option>
-    </select>
-    <label id="degree-label" for="degree">本科学历</label>
-    <div class="ant-select ant-select-show-search"><span class="ant-select-selection-item"></span><input id="degree" name="degree" role="combobox" aria-labelledby="degree-label" aria-controls="degree-list" aria-expanded="false" aria-autocomplete="list" required></div>
-    <div id="degree-list" role="listbox" style="display:none;position:absolute;background:white"></div>
-    <fieldset id="graduate-education"><legend>硕士研究生教育经历</legend>
-      <label for="graduate-school">研究生学校</label><input id="graduate-school" name="graduate_school">
-      <label for="graduate-college">研究生学院</label><input id="graduate-college" name="graduate_college">
-      <label for="graduate-major-category">研究生专业类别</label><input id="graduate-major-category" name="graduate_major_category">
-      <label for="graduate-degree">研究生学历层次</label><input id="graduate-degree" name="graduate_degree_level">
-      <label for="graduate-academic-degree">研究生学位</label><input id="graduate-academic-degree" name="graduate_academic_degree">
-    </fieldset>
-    <fieldset id="undergraduate-education"><legend>本科教育经历</legend>
-      <label for="undergraduate-school">本科学校</label><input id="undergraduate-school" name="undergraduate_school">
-      <label for="undergraduate-college">本科院系</label><input id="undergraduate-college" name="undergraduate_college">
-      <label for="undergraduate-major-category">本科专业类别</label><input id="undergraduate-major-category" name="undergraduate_major_category">
-      <label for="undergraduate-degree">本科学历层次</label><input id="undergraduate-degree" name="undergraduate_degree_level">
-      <label for="undergraduate-academic-degree">本科学位</label><input id="undergraduate-academic-degree" name="undergraduate_academic_degree">
-    </fieldset>
-    <label for="resume">上传简历</label><input id="resume" name="resume" type="file" accept=".pdf">
-    <div class="form-item"><label for="emergency-phone">紧急联系电话</label>
-      <input id="emergency-phone" name="emergency_phone" type="tel" required></div>
-    <label for="intro">请介绍你自己</label><textarea id="intro" name="intro"></textarea>
-    <div class="form-item"><label id="custom-label">自定义必答题</label>
-      <input id="custom-primary" aria-labelledby="custom-label" aria-required="true">
-      <input id="custom-helper" placeholder="请输入" aria-required="true"></div>
-    <iframe id="application-frame" src="/frame"></iframe>
-    <div class="form-item"><input id="generic-required-helper" placeholder="请输入" aria-required="true"></div></form>
-    <script>
-      const degreeInput = document.querySelector('#degree');
-      const degreeList = document.querySelector('#degree-list');
-      degreeInput.addEventListener('click', () => {
-        degreeInput.setAttribute('aria-expanded', 'true');
-        degreeList.style.display = 'block';
-        setTimeout(() => {
-          degreeList.innerHTML = ['非全日制', '专科', '大学本科', '硕士'].map(value =>
-            '<div role="option" style="height:24px;width:120px" data-value="' + value + '">' + value + '</div>'
-          ).join('');
-          degreeList.querySelectorAll('[role="option"]').forEach(option => option.addEventListener('click', () => {
-            degreeInput.value = option.dataset.value;
-            degreeInput.parentElement.querySelector('.ant-select-selection-item').textContent = option.dataset.value;
-            option.setAttribute('aria-selected', 'true');
-            degreeInput.setAttribute('aria-expanded', 'false');
-            degreeList.style.display = 'none';
-          }));
-        }, 120);
-      });
-    </script>
-  </body></html>`);
+  response.end(request.url === '/frame'
+    ? '<!doctype html><html><body><label for="email">邮箱</label><input id="email" name="email" type="email"></body></html>'
+    : '<!doctype html><html><body><label for="name">姓名</label><input id="name" name="name"><label for="gender">性别</label><select id="gender" name="gender"><option value="">请选择</option><option value="m">男</option><option value="f">女</option></select><label for="unknown">其他必答题</label><input id="unknown" name="answer"><iframe src="/frame"></iframe></body></html>');
 });
-
-await new Promise((resolve, reject) => {
-  server.once('error', reject);
-  server.listen(0, '127.0.0.1', resolve);
-});
-const address = server.address();
-if (!address || typeof address === 'string') throw new Error('测试服务器启动失败');
-const pageUrl = `http://127.0.0.1:${address.port}/`;
-const debugPort = address.port + 1;
-const profileDir = mkdtempSync(join(tmpdir(), 'job-applymate-smoke-'));
-const browser = spawn(browserPath, [
-  ...(process.env.JOB_APPLYMATE_HEADED === '1' ? [] : ['--headless=new']),
-  '--disable-gpu',
-  '--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding',
-  '--start-minimized',
-  '--window-position=-32000,-32000',
-  '--window-size=800,600',
-  '--no-first-run',
-  '--no-default-browser-check',
-  `--remote-debugging-port=${debugPort}`,
-  `--user-data-dir=${profileDir}`,
-  `--disable-extensions-except=${extensionDir}`,
-  `--load-extension=${extensionDir}`,
-  pageUrl,
-], { stdio: ['ignore', 'pipe', 'pipe'] });
-let browserDiagnostics = '';
-browser.stdout?.on('data', chunk => { browserDiagnostics += chunk.toString(); });
-browser.stderr?.on('data', chunk => { browserDiagnostics += chunk.toString(); });
-
-async function waitForPageTarget() {
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    try {
-      const targets = await fetch(`http://127.0.0.1:${debugPort}/json/list`).then(response => response.json());
-      const target = targets.find(item => item.type === 'page' && item.url === pageUrl);
-      if (target?.webSocketDebuggerUrl) return target.webSocketDebuggerUrl;
-    } catch {}
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
-  throw new Error('浏览器测试页未能启动');
-}
-
-async function evaluate(webSocketUrl, expression) {
-  return sendCdpCommand(webSocketUrl, 'Runtime.evaluate', {
-    expression,
-    returnByValue: true,
-    awaitPromise: true,
-  });
-}
-
-async function sendCdpCommand(webSocketUrl, method, params) {
-  const socket = new WebSocket(webSocketUrl);
-  await new Promise((resolve, reject) => {
-    socket.addEventListener('open', resolve, { once: true });
-    socket.addEventListener('error', reject, { once: true });
-  });
-  const result = await new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('浏览器检查超时')), 60000);
-    socket.addEventListener('message', event => {
-      const message = JSON.parse(event.data);
-      if (message.id !== 1) return;
-      clearTimeout(timeout);
-      resolve(message.result?.result?.value);
-    });
-    socket.send(JSON.stringify({
-      id: 1,
-      method,
-      params,
-    }));
-  });
-  socket.close();
-  return method === 'Runtime.evaluate' ? result : true;
-}
-
-async function captureRuntimeDiagnostics(webSocketUrl) {
-  const messages = [];
-  const socket = new WebSocket(webSocketUrl);
-  await new Promise((resolve, reject) => {
-    socket.addEventListener('open', resolve, { once: true });
-    socket.addEventListener('error', reject, { once: true });
-  });
-  socket.addEventListener('message', event => {
-    const message = JSON.parse(event.data);
-    if (message.method === 'Runtime.consoleAPICalled') {
-      messages.push(message.params.args.map(arg => arg.value || arg.description || '').join(' '));
-    }
-    if (message.method === 'Runtime.exceptionThrown') {
-      messages.push(message.params.exceptionDetails?.exception?.description || message.params.exceptionDetails?.text || 'exception');
-    }
-    if (message.method === 'Page.javascriptDialogOpening') {
-      messages.push(`dialog: ${message.params.message}`);
-      socket.send(JSON.stringify({ id: 93, method: 'Page.handleJavaScriptDialog', params: { accept: true } }));
-    }
-  });
-  socket.send(JSON.stringify({ id: 91, method: 'Runtime.enable', params: {} }));
-  socket.send(JSON.stringify({ id: 92, method: 'Page.enable', params: {} }));
-  return { messages, close: () => socket.close() };
-}
-
+await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+const url = `http://127.0.0.1:${server.address().port}/`;
+let browser;
+const connections = [];
 try {
-  const webSocketUrl = await waitForPageTarget();
-  const runtimeDiagnostics = await captureRuntimeDiagnostics(webSocketUrl);
-  await new Promise(resolve => setTimeout(resolve, 1800));
-  const initialized = await evaluate(
-    webSocketUrl,
-    `Array.from(document.querySelectorAll('style')).some(style => style.textContent.includes('@keyframes slideIn'))`,
-  );
-  if (!initialized) {
-    const targets = await fetch(`http://127.0.0.1:${debugPort}/json/list`).then(response => response.json());
-    console.error('浏览器目标：', targets.map(item => `${item.type}:${item.url}`).join('\n'));
-    console.error('浏览器诊断：', browserDiagnostics.slice(-4000));
-    throw new Error('content.js 未在真实浏览器页面中完成初始化');
-  }
-  const targets = await fetch(`http://127.0.0.1:${debugPort}/json/list`).then(response => response.json());
-  const serviceWorker = targets.find(item => item.type === 'service_worker' && /\/background\.js$/.test(item.url));
-  if (!serviceWorker?.webSocketDebuggerUrl) throw new Error('未找到 Job ApplyMate 后台脚本');
-  const detection = await evaluate(serviceWorker.webSocketDebuggerUrl, `(async () => {
-    const tabs = await chrome.tabs.query({ url: ${JSON.stringify(pageUrl)} });
-    if (!tabs[0]?.id) return { success: false, error: '测试页标签不存在' };
-    let response;
-    for (const delay of [0, 150, 300, 500]) {
-      if (delay) await new Promise(resolve => setTimeout(resolve, delay));
-      response = await chrome.tabs.sendMessage(tabs[0].id, { type: 'DETECT_FIELDS' }, { frameId: 0 });
-      if (Number(response?.data?.count || 0) >= 2) break;
-    }
-    return response || { success: false, error: '无响应' };
+  browser = await launchTestBrowser(resolve('dist'), url);
+  const workerTarget = await waitFor(async () => (await browser.targets()).find(target => target.type === 'service_worker' && target.url.endsWith('/background.js')), '扩展后台');
+  const background = await connectCdp(workerTarget.webSocketDebuggerUrl); connections.push(background);
+  await background.send('Runtime.enable');
+  await waitFor(() => background.evaluate('Boolean(globalThis.chrome?.storage?.local)'), '扩展 API');
+  await background.evaluate(`chrome.storage.local.set({ userProfile: {
+    personal: { name: '测试用户', gender: '男', birthDate: '', phone: '', email: 'local@example.com' },
+    education: [], experience: [], projects: [], skills: [], certifications: [], customInformation: []
+  }, llmConfig: { provider: 'custom', model: 'retired', baseUrl: '${url}v1', apiKey: 'retired-key' } })`);
+  const target = await waitFor(async () => (await browser.targets()).find(target => target.type === 'page' && target.url === url), '测试页面');
+  const page = await connectCdp(target.webSocketDebuggerUrl); connections.push(page); await page.send('Runtime.enable');
+  await waitFor(() => background.evaluate(`(async () => {
+    const tab = (await chrome.tabs.query({ url: '${url}' }))[0];
+    return tab?.id && (await chrome.tabs.sendMessage(tab.id, { type: 'PING_CONTENT' }, { frameId: 0 })).success;
+  })()`), 'DOM 填写器初始化');
+  await waitFor(() => page.evaluate("Boolean(document.querySelector('iframe').contentDocument.querySelector('#email'))"), 'iframe');
+  await background.evaluate(`(async () => {
+    const tab = (await chrome.tabs.query({ url: '${url}' }))[0];
+    return chrome.tabs.sendMessage(tab.id, { type: 'START_FILL_SESSION', payload: { sourceId: 'default' } }, { frameId: 0 });
   })()`);
-  if (!detection?.success || Number(detection.data?.count || 0) < 2) {
-    throw new Error(`真实浏览器字段检测失败：${JSON.stringify(detection)}`);
-  }
-  const quickFill = await evaluate(serviceWorker.webSocketDebuggerUrl, `(async () => {
-    await chrome.storage.local.set({ userProfile: {
-      personal: { name: '测试用户', gender: '', birthDate: '', phone: '', email: 'smoke@example.com', currentAddress: '上海市' },
-      education: [{ school: '', college: '', major: '', degree: '本科', educationType: '', startDate: '', endDate: '', gpa: '' }], experience: [], projects: [{ id: 'manual-project', name: '个人信息页项目', role: '负责人', startDate: '2025-01', endDate: '2025-06', description: '项目描述', achievements: '', technologies: '' }], customInformation: [{ id: 'learned-smoke-postcode', name: '家庭邮编', content: '100000' }], skills: [], certifications: [],
-      resume: { fileName: '产品经理原名.pdf', fileData: 'data:application/pdf;base64,JVBERi0xLjQ=', fileType: 'pdf', uploadDate: '2026-09-07T00:00:00.000Z' },
-      resumes: [
-        { id: 'resume-product', category: '产品岗', fileName: '产品经理原名.pdf', fileData: 'data:application/pdf;base64,JVBERi0xLjQ=', fileType: 'pdf', uploadDate: '2026-09-07T00:00:00.000Z', parsedProfile: {
-          personal: { name: '产品版用户', email: 'product@example.com', currentAddress: '北京市' },
-          education: [{ id: 'product-edu', school: '', college: '', major: '', degree: '本科', educationType: '', startDate: '', endDate: '', gpa: '' }], experience: [], projects: [], skills: []
-        } },
-        { id: 'resume-operations', category: '运营岗', fileName: '运营岗位定制版.pdf', fileData: 'data:application/pdf;base64,JVBERi0xLjQ=', fileType: 'pdf', uploadDate: '2026-09-07T00:00:00.000Z', parsedProfile: {
-          personal: { name: '运营版用户', email: 'operations@example.com', currentAddress: '深圳市', politicalStatus: '中共预备党员' },
-          education: [
-            { id: 'operations-undergraduate', school: '山东科技大学', college: '智能装备学院', major: '过程装备与控制工程', majorCategory: '机械类', degree: '本科', academicDegree: '工学学士', educationType: '统招全日制', startDate: '2020-09', endDate: '2024-06', gpa: '' },
-            { id: 'operations-graduate', school: '新疆大学', college: '电气工程学院', major: '能源动力', majorCategory: '动力工程及工程热物理', degree: '硕士研究生', academicDegree: '工程硕士', educationType: '统招全日制', startDate: '2024-09', endDate: '2027-06', gpa: '' }
-          ], experience: [], projects: [], skills: []
-        } }
-      ]
-    } });
-    const tabs = await chrome.tabs.query({ url: ${JSON.stringify(pageUrl)} });
-    if (!tabs[0]?.id) return { success: false, error: '测试页标签不存在' };
-    const preview = await chrome.tabs.sendMessage(tabs[0].id, { type: 'PREVIEW_FILL', payload: { resumeId: 'resume-operations' } }, { frameId: 0 });
-    const startedAt = performance.now();
-    const fill = await chrome.tabs.sendMessage(tabs[0].id, {
-      type: 'FILL_FORM',
-      payload: { reusePreview: true, resumeId: 'resume-operations' }
-    }, { frameId: 0 });
-    return {
-      success: Boolean(preview?.success && fill?.success),
-      previewCount: preview?.data?.items?.length || 0,
-      previewItems: preview?.data?.items || [],
-      durationMs: Math.round(performance.now() - startedAt),
-      error: preview?.error || fill?.error
-    };
+  const result = await waitFor(() => background.evaluate(`(async () => {
+    const tab = (await chrome.tabs.query({ url: '${url}' }))[0];
+    const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_FILL_SESSION_RESULT' }, { frameId: 0 });
+    return response.data?.result?.settled && response.data.result;
+  })()`), '规则填写完成', 30000);
+  assert.equal(result.counts.verified, 3); assert.equal(result.counts.todo, 1);
+  const values = await page.evaluate("({ name: document.querySelector('#name').value, gender: document.querySelector('#gender').value, unknown: document.querySelector('#unknown').value, email: document.querySelector('iframe').contentDocument.querySelector('#email').value, panels: document.querySelectorAll('[data-job-applymate-task]').length })");
+  assert.deepEqual(values, { name: '测试用户', gender: 'm', unknown: '', email: 'local@example.com', panels: 1 });
+  console.log('✓ DOM 识别、本地规则、编码下拉和 iframe 填写，未知字段保持空白');
+  await background.evaluate('chrome.runtime.openOptionsPage()');
+  const optionsTarget = await waitFor(async () => (await browser.targets()).find(target => target.type === 'page' && target.url.includes('/src/options/index.html')), '设置页面');
+  const options = await connectCdp(optionsTarget.webSocketDebuggerUrl); connections.push(options); await options.send('Runtime.enable');
+  await waitFor(() => options.evaluate("Boolean(document.querySelector('#personal-name'))"), '资料表单');
+  assert.equal(await options.evaluate("Boolean(document.querySelector('#profile-ai')) || /模型设置|API Key/.test(document.body.innerText)"), false);
+  const responses = await options.evaluate(`(async () => {
+    const removed = [];
+    for (const type of ['GET_LLM_CONFIG', 'SAVE_LLM_CONFIG', 'TEST_LLM_CONNECTION', 'GENERATE_ANSWER', 'MATCH_FIELDS_LLM', 'AI_FILL_SECTION', 'AI_FILL_VISUAL_REGION', 'DECIDE_FILL_FIELDS']) removed.push(await chrome.runtime.sendMessage({ type, payload: {} }));
+    const backup = await chrome.runtime.sendMessage({ type: 'EXPORT_BACKUP' });
+    const legacy = JSON.parse(backup.data.json); legacy.data.llmConfig = { apiKey: 'retired-key' };
+    const imported = await chrome.runtime.sendMessage({ type: 'IMPORT_BACKUP', payload: { json: JSON.stringify(legacy) } });
+    return { removed, backup, imported };
   })()`);
-  if (!quickFill?.success || Number(quickFill.previewCount || 0) < 2) {
-    throw new Error(`真实浏览器快速填充失败：${JSON.stringify(quickFill)}`);
-  }
-  const filledValues = await evaluate(webSocketUrl, `({
-    name: document.querySelector('#name')?.value,
-    email: document.querySelector('#email')?.value,
-    politicalStatus: document.querySelector('#political-status')?.value,
-    politicalStatusText: document.querySelector('#political-status')?.selectedOptions?.[0]?.textContent,
-    degree: document.querySelector('#degree')?.value,
-    degreeExpanded: document.querySelector('#degree')?.getAttribute('aria-expanded'),
-    degreeOptions: Array.from(document.querySelectorAll('#degree-list [role="option"]')).map(option => ({ text: option.textContent, selected: option.getAttribute('aria-selected') })),
-    degreeListDisplay: getComputedStyle(document.querySelector('#degree-list')).display,
-    graduateSchool: document.querySelector('#graduate-school')?.value,
-    graduateCollege: document.querySelector('#graduate-college')?.value,
-    graduateMajorCategory: document.querySelector('#graduate-major-category')?.value,
-    graduateDegree: document.querySelector('#graduate-degree')?.value,
-    graduateAcademicDegree: document.querySelector('#graduate-academic-degree')?.value,
-    undergraduateSchool: document.querySelector('#undergraduate-school')?.value,
-    undergraduateCollege: document.querySelector('#undergraduate-college')?.value,
-    undergraduateMajorCategory: document.querySelector('#undergraduate-major-category')?.value,
-    undergraduateDegree: document.querySelector('#undergraduate-degree')?.value,
-    undergraduateAcademicDegree: document.querySelector('#undergraduate-academic-degree')?.value,
-    genericRequiredHelper: document.querySelector('#generic-required-helper')?.value,
-    resumeName: document.querySelector('#resume')?.files?.[0]?.name || '',
-    failureLabels: Array.from(document.querySelectorAll('[data-failure-review-label="true"]')).map(item => item.textContent)
-  })`);
-  if (filledValues?.name !== '测试用户' || filledValues?.email !== 'smoke@example.com'
-    || filledValues?.politicalStatus !== 'probationary' || filledValues?.politicalStatusText !== '中共预备党员'
-    || filledValues?.degree !== '大学本科' || filledValues?.resumeName !== '运营岗位定制版.pdf'
-    || filledValues?.graduateSchool !== '新疆大学' || filledValues?.graduateCollege !== '电气工程学院'
-    || filledValues?.graduateMajorCategory !== '动力工程及工程热物理' || filledValues?.graduateDegree !== '硕士研究生'
-    || filledValues?.graduateAcademicDegree !== '工程硕士' || filledValues?.undergraduateSchool !== '山东科技大学'
-    || filledValues?.undergraduateCollege !== '智能装备学院' || filledValues?.undergraduateMajorCategory !== '机械类'
-    || filledValues?.undergraduateDegree !== '本科' || filledValues?.undergraduateAcademicDegree !== '工学学士'
-    || filledValues?.genericRequiredHelper !== '') {
-    runtimeDiagnostics.close();
-    throw new Error(`真实浏览器写入结果错误：${JSON.stringify({ quickFill, filledValues, runtimeMessages: runtimeDiagnostics.messages })}`);
-  }
-  await evaluate(webSocketUrl, `(() => {
-    document.querySelector('#name').value = '';
-    document.querySelector('#email').value = '';
-    document.querySelector('#resume').value = '';
-  })()`);
-  const skipResumeFill = await evaluate(serviceWorker.webSocketDebuggerUrl, `(async () => {
-    const tabs = await chrome.tabs.query({ url: ${JSON.stringify(pageUrl)} });
-    return chrome.tabs.sendMessage(tabs[0].id, { type: 'FILL_FORM', payload: { resumeId: null } }, { frameId: 0 });
-  })()`);
-  const skippedResumeName = await evaluate(webSocketUrl, `document.querySelector('#resume')?.files?.[0]?.name || ''`);
-  if (!skipResumeFill?.success || skippedResumeName) {
-    throw new Error(`选择不上传简历时仍写入了文件：${JSON.stringify({ skipResumeFill, skippedResumeName })}`);
-  }
-  await evaluate(webSocketUrl, `(() => {
-    document.querySelector('#name').value = '';
-    document.querySelector('#email').value = '';
-    document.querySelector('#degree').value = '';
-    document.querySelector('.ant-select-selection-item').textContent = '';
-    document.querySelector('#degree').setAttribute('aria-expanded', 'false');
-    document.querySelector('#degree-list').innerHTML = '';
-    document.querySelector('#degree-list').style.display = 'none';
-  })()`);
-  const progressiveAI = await evaluate(serviceWorker.webSocketDebuggerUrl, `(async () => {
-    const tabs = await chrome.tabs.query({ url: ${JSON.stringify(pageUrl)} });
-    return chrome.tabs.sendMessage(tabs[0].id, {
-      type: 'START_AI_PAGE_FILL',
-      payload: { resumeId: null }
-    }, { frameId: 0 });
-  })()`);
-  const valuesKeptAfterAIStopped = await evaluate(webSocketUrl, `(async () => {
-    for (let attempt = 0; attempt < 40; attempt++) {
-      const values = {
-        name: document.querySelector('#name')?.value,
-        email: document.querySelector('#email')?.value,
-        degree: document.querySelector('#degree')?.value
-      };
-      if (values.name && values.email && values.degree) return values;
-      await new Promise(resolve => setTimeout(resolve, 50));
-    }
-    return {
-      name: document.querySelector('#name')?.value,
-      email: document.querySelector('#email')?.value,
-      degree: document.querySelector('#degree')?.value
-    };
-  })()`);
-  if (!progressiveAI?.success
-    || valuesKeptAfterAIStopped?.name !== '测试用户'
-    || valuesKeptAfterAIStopped?.email !== 'smoke@example.com'
-    || valuesKeptAfterAIStopped?.degree !== '大学本科') {
-    throw new Error(`AI 中止时未保留已完成结果：${JSON.stringify({ progressiveAI, valuesKeptAfterAIStopped })}`);
-  }
-  const aiSettled = await evaluate(webSocketUrl, `(async () => {
-    for (let attempt = 0; attempt < 200; attempt++) {
-      if (/AI 扫描填充完成|AI 扫描已停止|AI 扫描填充已终止|未检测到可扫描的空白表单字段/.test(document.body.innerText)) return true;
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-    return false;
-  })()`);
-  if (!aiSettled) throw new Error('AI 填写未结束，不能并发测试悬浮窗写入');
-  const overlayOpen = await evaluate(serviceWorker.webSocketDebuggerUrl, `(async () => {
-    const tabs = await chrome.tabs.query({ url: ${JSON.stringify(pageUrl)} });
-    if (!tabs[0]?.id) return { success: false, error: '测试页标签不存在' };
-    return chrome.tabs.sendMessage(tabs[0].id, { type: 'OPEN_INFO_OVERLAY', payload: { resumeId: 'resume-product' } });
-  })()`);
-  if (!overlayOpen?.success) {
-    throw new Error(`网页内信息浮窗打开失败：${JSON.stringify(overlayOpen)}`);
-  }
-  const overlayState = await evaluate(webSocketUrl, `(() => {
-    const host = document.querySelector('#job-applymate-info-overlay-host');
-    const button = host?.shadowRoot?.querySelector('[data-profile-key="personal-name"]');
-    const sections = Array.from(host?.shadowRoot?.querySelectorAll('.section') || []);
-    const missingSection = sections.find(section => section.querySelector('summary span')?.textContent === '缺失信息填补');
-    const name = document.querySelector('#name');
-    name.value = '';
-    name.focus();
-    button?.click();
-    return {
-      exists: Boolean(host && button),
-      position: host ? getComputedStyle(host).position : '',
-      zIndex: host ? getComputedStyle(host).zIndex : '',
-      projectName: host?.shadowRoot?.querySelector('[data-profile-key="projects-manual-project-name"] .field-value')?.textContent || '',
-      projectSummary: Array.from(host?.shadowRoot?.querySelectorAll('.section summary') || []).find(summary => summary.querySelector('span')?.textContent === '项目经历')?.textContent || '',
-      missingInformationLabels: Array.from(missingSection?.querySelectorAll('.field-label') || []).map(item => item.textContent),
-      allSectionsOpen: Array.from(host?.shadowRoot?.querySelectorAll('.section') || []).every(section => section.open)
-    };
-  })()`);
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  const overlayFilledName = await evaluate(webSocketUrl, `document.querySelector('#name')?.value`);
-  const overlayFeedback = await evaluate(webSocketUrl, `(() => {
-    const host = document.querySelector('#job-applymate-info-overlay-host');
-    return {
-      status: host?.shadowRoot?.querySelector('[data-overlay-status]')?.textContent || '',
-      activeElement: document.activeElement?.id || document.activeElement?.tagName || ''
-    };
-  })()`);
-  if (!overlayState?.exists || overlayState.position !== 'fixed' || overlayState.zIndex !== '2147483647'
-    || overlayFilledName !== '测试用户' || overlayState.projectName !== '个人信息页项目'
-    || !overlayState.projectSummary.includes('5') || !overlayState.missingInformationLabels?.includes('家庭邮编')
-    || !overlayState.allSectionsOpen) {
-    throw new Error(`网页内信息浮窗置顶或点击写入失败：${JSON.stringify({ overlayState, overlayFilledName, overlayFeedback })}`);
-  }
-  await evaluate(webSocketUrl, `(() => {
-    const frameInput = document.querySelector('#application-frame')?.contentDocument?.querySelector('#city');
-    const button = document.querySelector('#job-applymate-info-overlay-host')?.shadowRoot?.querySelector('[data-profile-key="personal-currentAddress"]');
-    frameInput?.focus();
-    button?.click();
-  })()`);
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  const iframeFilledCity = await evaluate(webSocketUrl, `document.querySelector('#application-frame')?.contentDocument?.querySelector('#city')?.value`);
-  if (iframeFilledCity !== '上海市') {
-    throw new Error(`信息浮窗未能写入子框架字段：${JSON.stringify(iframeFilledCity)}`);
-  }
-  const switchedOverlay = await evaluate(serviceWorker.webSocketDebuggerUrl, `(async () => {
-    const tabs = await chrome.tabs.query({ url: ${JSON.stringify(pageUrl)} });
-    return chrome.tabs.sendMessage(tabs[0].id, { type: 'SET_INFO_OVERLAY_RESUME', payload: { resumeId: 'resume-operations' } });
-  })()`);
-  const switchedOverlayState = await evaluate(webSocketUrl, `(() => {
-    const shadow = document.querySelector('#job-applymate-info-overlay-host')?.shadowRoot;
-    return {
-      label: shadow?.querySelector('[data-resume-label]')?.textContent || '',
-      name: shadow?.querySelector('[data-profile-key="personal-name"] .field-value')?.textContent || ''
-    };
-  })()`);
-  if (!switchedOverlay?.success || switchedOverlayState?.name !== '测试用户' || !switchedOverlayState?.label.includes('运营岗')) {
-    throw new Error(`信息浮窗未随简历选择切换：${JSON.stringify({ switchedOverlay, switchedOverlayState })}`);
-  }
-  const overlayRestored = await evaluate(webSocketUrl, `(async () => {
-    const host = document.querySelector('#job-applymate-info-overlay-host');
-    host?.remove();
-    await new Promise(resolve => setTimeout(resolve, 0));
-    return Boolean(host?.isConnected);
-  })()`);
-  if (!overlayRestored) throw new Error('信息浮窗被页面移除后未自动恢复');
-  const duplicateInjection = await evaluate(serviceWorker.webSocketDebuggerUrl, `(async () => {
-    const tabs = await chrome.tabs.query({ url: ${JSON.stringify(pageUrl)} });
-    if (!tabs[0]?.id) return { success: false, error: '测试页标签不存在' };
-    await chrome.scripting.executeScript({ target: { tabId: tabs[0].id, frameIds: [0] }, files: ['content.js'] });
-    await chrome.scripting.executeScript({ target: { tabId: tabs[0].id, frameIds: [0] }, files: ['content.js'] });
-    return chrome.tabs.sendMessage(tabs[0].id, { type: 'OPEN_INFO_OVERLAY' });
-  })()`);
-  if (!duplicateInjection?.success) throw new Error(`重复注入场景打开浮窗失败：${JSON.stringify(duplicateInjection)}`);
-  await new Promise(resolve => setTimeout(resolve, 100));
-  const singleCloseState = await evaluate(webSocketUrl, `(async () => {
-    const hosts = Array.from(document.querySelectorAll('[data-job-applymate-overlay="true"]'));
-    hosts[0]?.shadowRoot?.querySelector('[data-close]')?.click();
-    await new Promise(resolve => setTimeout(resolve, 0));
-    return {
-      hostCount: hosts.length,
-      visibleCount: Array.from(document.querySelectorAll('[data-job-applymate-overlay="true"]'))
-        .filter(host => getComputedStyle(host).display !== 'none').length
-    };
-  })()`);
-  if (singleCloseState?.hostCount !== 1 || singleCloseState.visibleCount !== 0) {
-    throw new Error(`悬浮窗重复实例未被正确清理：${JSON.stringify(singleCloseState)}`);
-  }
-  const review = await evaluate(webSocketUrl, `(() => {
-    const shadow = document.querySelector('#job-applymate-failure-review')?.shadowRoot;
-    const input = shadow?.querySelector('input,select');
-    return {
-      count: shadow?.querySelectorAll('[data-failure-review-item="true"]').length || 0,
-      labels: Array.from(shadow?.querySelectorAll('[data-failure-review-label="true"]') || []).map(item => item.textContent),
-      title: shadow?.querySelector('strong')?.textContent || '',
-      inputFontSize: input ? getComputedStyle(input).fontSize : ''
-    };
-  })()`);
-  if (review?.count < 2 || !review.labels?.includes('自定义必答题')
-    || !review.labels?.includes('紧急联系电话')
-    || review.labels?.some(label => /unknown|请输入|请填写|请选择/i.test(label))
-    || review.inputFontSize !== '13px') {
-    throw new Error(`失败复盘过滤或去重错误：${JSON.stringify(review)}`);
-  }
-  const answerSaved = await evaluate(webSocketUrl, `(async () => {
-    const shadow = document.querySelector('#job-applymate-failure-review')?.shadowRoot;
-    const row = Array.from(shadow?.querySelectorAll('[data-failure-review-item="true"]') || [])
-      .find(item => item.querySelector('[data-failure-review-label="true"]')?.textContent === '紧急联系电话');
-    const input = row?.querySelector('input,select');
-    const hint = row?.querySelector('textarea');
-    const remember = Array.from(row?.querySelectorAll('button') || []).find(button => button.textContent === '填写并记住');
-    if (!input || !hint || !remember) return false;
-    input.value = '13800001111';
-    hint.value = '这是紧急联系人的电话，不是候选人本人的联系电话';
-    remember.click();
-    for (let attempt = 0; attempt < 60; attempt++) {
-      if (!row.isConnected) return document.querySelector('#emergency-phone')?.value === '13800001111';
-      await new Promise(resolve => setTimeout(resolve, 50));
-    }
-    return false;
-  })()`);
-  const learnedEmergency = await evaluate(serviceWorker.webSocketDebuggerUrl, `(async () => {
-    const stored = await chrome.storage.local.get(['userProfile', 'settings']);
-    const custom = stored.userProfile?.customInformation?.find(item => item.name === '紧急联系电话');
-    const learned = Object.values(stored.settings?.learnedFieldValues?.['127.0.0.1'] || {})
-      .find(item => item.label === '紧急联系电话');
-    return {
-      customValue: custom?.content || '',
-      learnedValue: learned?.value || '',
-      hasRule: String(stored.settings?.fieldRecognitionRules || '').includes('这是紧急联系人的电话，不是候选人本人的联系电话')
-    };
-  })()`);
-  if (!answerSaved || learnedEmergency?.customValue !== '13800001111'
-    || learnedEmergency?.learnedValue !== '13800001111' || !learnedEmergency?.hasRule) {
-    throw new Error(`缺失信息学习未完整保存：${JSON.stringify({ answerSaved, learnedEmergency })}`);
-  }
-  const genericHelperValue = await evaluate(webSocketUrl, `document.querySelector('#generic-required-helper')?.value`);
-  if (genericHelperValue !== '') throw new Error(`无标题辅助输入框被误填：${JSON.stringify(genericHelperValue)}`);
-  console.log('✓ content.js 在真实浏览器表单页中成功初始化');
-  console.log(`✓ 真实浏览器识别到 ${detection.data.count} 个可填字段`);
-  console.log(`✓ 真实浏览器快速填充成功（${quickFill.durationMs}ms）`);
-  console.log('✓ 动态下拉框会等待选项加载，并把“本科”安全匹配为“大学本科”');
-  console.log('✓ 政治面貌会把“中共预备党员”严格匹配到对应选项，不会误选民主党派');
-  console.log('✓ 本科与研究生会按学历层次匹配各自的学校、学院、专业类别和学位');
-  console.log('✓ AI 服务不可用时仍会保留停止前已经完成的本地填写结果');
-  console.log('✓ 可按分类选择指定简历上传，也可明确选择本次不上传');
-  console.log('✓ 网页内信息浮窗固定在最高层级，可写入主页面和子框架字段，被移除后会自动恢复');
-  console.log('✓ content.js 即使重复注入，悬浮窗也只有一个实例且关闭一次即可隐藏');
-  console.log('✓ 切换简历时公共个人信息保持与设置页同步，简历分类与经历仍正确切换');
-  console.log('✓ 简历未解析出项目时，悬浮窗会显示个人信息页保存的项目经历');
-  console.log('✓ 信息悬浮窗默认展开全部栏目');
-  console.log('✓ 失败复盘窗口不会继承招聘网站的大字号样式');
-  console.log('✓ 失败复盘会过滤辅助输入框，并对同一逻辑字段去重显示');
-  console.log('✓ 无标题辅助输入框不会借用其他字段标签误填姓名');
-  console.log('✓ 紧急联系电话不会误用本人手机号，补填答案会同时保存到个人资料和网站学习记录');
-  console.log('✓ 失败窗口中的 AI 识别纠错会写入 Markdown Skill');
-  console.log('✓ 内部英文字段键显示为中文，自动学习条目在悬浮窗中单独归入“缺失信息填补”');
-  runtimeDiagnostics.close();
+  assert(responses.removed.every(response => response.success === false));
+  assert.equal(responses.backup.success, true); assert.equal(responses.imported.success, true);
+  assert.doesNotMatch(responses.backup.data.json, /llmConfig|retired-key/);
+  assert.equal(networkRequests.length, 0);
+  console.log('✓ 模型设置和旧消息接口已移除；本地备份忽略旧凭据，填写未请求模型');
+  // Restart the isolated extension to exercise cleanup of credentials persisted by an older version.
+  await background.evaluate('setTimeout(() => chrome.runtime.reload(), 100); true');
+  const restartedTarget = await waitFor(async () => (await browser.targets()).find(target => target.type === 'service_worker' && target.id !== workerTarget.id && target.url.endsWith('/background.js')), '扩展重启');
+  const restarted = await connectCdp(restartedTarget.webSocketDebuggerUrl); connections.push(restarted); await restarted.send('Runtime.enable');
+  await waitFor(() => restarted.evaluate('Boolean(globalThis.chrome?.storage?.local)'), '重启后的扩展 API');
+  const stored = await waitFor(async () => {
+    const values = await restarted.evaluate('chrome.storage.local.get(null)');
+    return !('llmConfig' in values) && values;
+  }, '旧模型配置清理');
+  assert.equal(stored.userProfile.personal.name, '测试用户');
+  console.log('✓ 扩展启动清理旧 API Key，并保留个人资料');
 } finally {
-  if (process.platform === 'win32' && browser.pid) {
-    await new Promise(resolve => {
-      const cleanup = spawn('taskkill', ['/pid', String(browser.pid), '/T', '/F'], { stdio: 'ignore' });
-      cleanup.once('exit', resolve);
-      cleanup.once('error', resolve);
-    });
-  } else {
-    browser.kill();
-  }
-  await new Promise(resolve => setTimeout(resolve, 2500));
-  server.close();
-  try {
-    rmSync(profileDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
-  } catch (error) {
-    console.warn(`测试浏览器临时目录稍后由系统清理：${error instanceof Error ? error.message : String(error)}`);
-  }
+  for (const connection of connections) connection.close();
+  if (browser) await browser.close();
+  await new Promise(resolve => server.close(resolve));
 }

@@ -9,13 +9,9 @@ import type { ParsedResumeData, UserProfile } from '../shared/types.ts';
 import { SUPPLEMENTAL_COLLECTIONS } from '../shared/profileCollections.ts';
 import { createResumeProfileSnapshot, buildProfileForResume } from '../shared/resumes.ts';
 import { createProfileSnapshot } from './profileSnapshot.ts';
-import { createProfileImportDraft, applyProfileImportDraft } from './profileImport.ts';
 import { createBackupDocument, serializeBackup, parseAndValidateBackup } from '../shared/backup.ts';
 import { parseResumeJSON } from '../parsers/jsonParser.ts';
 import { NLPHelper } from '../utils/nlpHelper.ts';
-import { validateFieldMappings } from '../services/llm/fieldMapping.ts';
-import { resolveLearnedValue } from '../shared/learnedFields.ts';
-import { buildResumeParsingPrompt, buildAnswerGenerationPrompt, buildSectionFillPrompt } from '../services/llm/prompts.ts';
 const empty: UserProfile = { personal: { name: '', gender: '', birthDate: '', phone: '', email: '' }, education: [], experience: [], projects: [], skills: [], certifications: [], customInformation: [] };
 test('prefills empty facts without replacing confirmed identity or inferring missing facts', () => {
   const base = { ...empty, personal: { ...empty.personal, name: '已确认姓名' } };
@@ -36,7 +32,7 @@ test('review save preserves uploaded files and unrelated concurrent facts, rejec
   assert.equal(result.personal.email, latest.personal.email); assert.equal(result.resumes?.length, 1);
   assert.throws(() => mergeReviewedProfile(empty, draft, { ...latest, personal: { ...latest.personal, phone: 'another' } }), /其他页面更新/);
 });
-test('model output is constrained to editable text fields and cannot supply record IDs', () => {
+test('structured input is constrained to editable text fields and cannot supply record IDs', () => {
   const result = normalizeParsedResume({ personal: { name: ' 示例 ', phone: { malicious: true }, age: '23', portfolioUrl: 'https://example.com', admin: 'ignore' }, education: [{ id: 'existing-user-id', school: '甲大学', degree: '本科' }], skills: ['React', 123] }, '原文');
   assert.equal(result.personal?.name, '示例'); assert.equal(result.personal?.phone, undefined);
   assert.equal((result.personal as Record<string, unknown>).admin, undefined); assert.notEqual(result.education?.[0].id, 'existing-user-id');
@@ -66,7 +62,7 @@ test('rich facts survive parsing, review, backup and selected-resume fact snapsh
   const reviewed = mergeReviewedProfile(empty, createPrefilledReview(empty, parsed), empty);
   const snapshot = createResumeProfileSnapshot({ ...reviewed, rawText: richResume.rawText });
   const profile = { ...reviewed, resumes: [{ id: 'rich', category: '研究岗位', fileName: 'rich.pdf', fileData: 'data:application/pdf;base64,QQ==', fileType: 'pdf', uploadDate: '2026-10-01', parsedProfile: snapshot }] };
-  const backup = parseAndValidateBackup(serializeBackup(createBackupDocument({ userProfile: profile, llmConfig: null, settings: null }, 'test')));
+  const backup = parseAndValidateBackup(serializeBackup(createBackupDocument({ userProfile: profile, settings: null }, 'test')));
   assert(backup.success);
   const restored = backup.document.data.userProfile!;
   for (const collection of SUPPLEMENTAL_COLLECTIONS) {
@@ -95,12 +91,11 @@ test('optional-fact saves preserve unrelated concurrent edits and reject same-se
   assert.throws(() => mergeReviewedProfile(empty, draft, latest), /其他页面更新/);
   const unrelated = { ...empty, projects: [{ id: 'p', name: '已在其他页面保存', role: '', startDate: '', endDate: '', description: '', achievements: '' }] };
   assert.equal(mergeReviewedProfile(empty, draft, unrelated).projects[0].id, 'p');
-  const changes = createProfileImportDraft(empty, richResume);
-  assert.equal(applyProfileImportDraft(empty, changes).publications![0].title, '示例论文');
+  assert.equal(mergeReviewedProfile(empty, draft, empty).publications![0].title, '示例论文');
 });
 test('backups reject malformed supplemental records in global and resume-specific facts', () => {
   const reviewed = createPrefilledReview(empty, richResume);
-  const document = createBackupDocument({ userProfile: reviewed, llmConfig: null, settings: null }, 'test');
+  const document = createBackupDocument({ userProfile: reviewed, settings: null }, 'test');
   for (const collection of SUPPLEMENTAL_COLLECTIONS) {
     const bad = structuredClone(document);
     Object.assign(bad.data.userProfile!, { [collection]: [{ id: 'bad', ...Object.fromEntries(Object.keys(reviewed[collection]![0]).filter(key => key !== 'id').map(key => [key, { invalid: true }])) }] });
@@ -116,37 +111,13 @@ test('canonical and editor JSON imports preserve supplemental and unfamiliar lab
   assert.equal(editor.publications![0].doi, '10.1234/example');
   assert.equal(editor.personal?.nationality, '中国'); assert.equal(editor.additionalInfo![0].content, 'C1');
 });
-test('without LLM, non-core sections remain reviewable as verbatim supplemental facts', () => {
+test('local parsing keeps non-core sections reviewable as verbatim supplemental facts', () => {
   const text = '# 获奖与荣誉\n2023 国家奖学金\n# 语言能力\n英语 CET-6 580\n# 论文与著作\n示例论文，第二作者，已录用\n# 专利\nCN001 申请中';
   const parsed = NLPHelper.parseResumeText(text);
   assert.equal(parsed.additionalInfo?.length, 4);
   assert.equal(parsed.additionalInfo![2].content, '示例论文，第二作者，已录用');
   assert.equal(parsed.publications, undefined);
 });
-test('supplemental facts can fill via grounded paths and learned paths follow stable IDs', () => {
-  const profile = createPrefilledReview(empty, richResume);
-  const mappings = validateFieldMappings({ 0: { profilePath: 'languages.0.score', value: '580' }, 1: { profilePath: 'publications.0.status', value: '已发表' } }, [
-    { index: 0, label: '成绩', name: 'score', options: [] }, { index: 1, label: '发表状态', name: 'status', options: [] },
-  ], profile);
-  assert.equal(mappings[0]?.value, '580'); assert.equal(mappings[1], undefined);
-  const mixed = validateFieldMappings({ 0: { profilePath: 'languages.0.test' }, 1: { profilePath: 'languages.1.score' } }, [
-    { index: 0, label: '考试', name: 'test', options: [], blockId: 'language-test' }, { index: 1, label: '成绩', name: 'score', options: [], blockId: 'language-test' },
-  ], profile);
-  assert.deepEqual(mixed, {}, 'one exam block must not mix two exam records');
-  const memory = { signature: 'score', label: 'CET-6成绩', value: '580', profilePath: 'languages.0.score', profileRecordId: profile.languages![0].id, updatedAt: '' };
-  assert.equal(resolveLearnedValue(memory, { ...profile, languages: [...profile.languages!].reverse() }), '580');
-  assert.equal(resolveLearnedValue(memory, { ...profile, languages: [] }), '');
-});
-test('parsing and downstream answer prompts include rich facts without exposing resume files', () => {
-  const prompt = buildResumeParsingPrompt('原文').system;
-  const schema = JSON.parse(prompt.slice(prompt.indexOf('{'), prompt.lastIndexOf('}') + 1));
-  for (const collection of SUPPLEMENTAL_COLLECTIONS) assert(Array.isArray(schema[collection]), collection);
-  const profile = createPrefilledReview(empty, richResume);
-  assert.match(buildAnswerGenerationPrompt({ questionText: '介绍学术成果' }, profile).user, /示例论文.*第二作者/);
-  const fill = buildSectionFillPrompt({ requestId: 'test', section: '', fields: [], domain: 'example.test' }, profile).user;
-  assert.match(fill, /国家奖学金/); assert.match(fill, /580/); assert(!fill.includes('fileData'));
-});
-
 const mixedResearch = readFileSync(new URL('../../tests/resume-fixtures/mixed-research.txt', import.meta.url), 'utf8');
 test('mixed Project sections recover Paper/DOI entries and offer ambiguous conference entries for review', () => {
   const parsed = recoverResumePublications(normalizeParsedResume({ projects: [{ name: '所有研究被归为项目' }], publications: [] }, mixedResearch), mixedResearch);
@@ -166,7 +137,7 @@ test('mixed Project sections recover Paper/DOI entries and offer ambiguous confe
   assert(!createPrefilledReview(empty, parsed).publications?.some(row => row.title === 'COSMIC SONIC'));
   assert.equal(parsed.parsingWarnings?.length, 1);
 });
-test('coverage repair adds missing papers without duplicating existing model papers or overriding facts', () => {
+test('coverage repair adds missing papers without duplicating existing papers or overriding facts', () => {
   const parsed = recoverResumePublications({ rawText: mixedResearch, publications: [{ id: 'model-id', title: 'CosmoSonic: Resonating with the Void - A Multimodal Embodied Interaction System\nBased on Real-Time Cosmological Data Mapping', authors: '原文已有署名', date: '2026', status: '' }] }, mixedResearch);
   assert.equal(parsed.publications?.length, 3); assert.equal(parsed.publications![0].id, 'model-id');
   assert.equal(parsed.publications![0].authors, '原文已有署名'); assert.equal(parsed.publications![0].date, '2026');
@@ -191,11 +162,9 @@ test('only explicit publication dates/statuses are extracted; inline dates in ti
   assert.equal(parsed.publications![0].date, '2025-06'); assert.equal(parsed.publications![0].status, '已录用');
   assert(!parsed.publications![0].description?.includes('普通工具'));
 });
-test('the local-rule path also recovers academic clues, without an LLM call', () => {
+test('local parsing recovers academic clues and carries them into facts', () => {
   const parsed = recoverResumePublications(NLPHelper.parseResumeText(mixedResearch), mixedResearch);
   const profile = createPrefilledReview(empty, parsed);
   assert.equal(profile.publications?.length, 3);
   assert(createProfileSnapshot(profile).facts.some(fact => fact.meaningId === 'publications.doi' && fact.value === '10.5555/3721488.3721821'));
-  assert.match(buildResumeParsingPrompt(mixedResearch).system, /项目研究 Project/);
-  assert.match(buildResumeParsingPrompt(mixedResearch).system, /Paper Track Decision 不是“已录用”/);
 });

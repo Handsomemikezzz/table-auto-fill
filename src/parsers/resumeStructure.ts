@@ -8,10 +8,10 @@ function strings(value: unknown, keys: string[]) {
   const source = object(value);
   return Object.fromEntries(keys.flatMap(key => typeof source[key] === 'string' ? [[key, (source[key] as string).trim().slice(0, 12_000)]] : []));
 }
-/** Constrain model output to the editable resume schema; model-supplied IDs are ignored. */
+/** Constrain structured input to the editable resume schema; supplied IDs are ignored. */
 export function normalizeParsedResume(value: unknown, rawText: string): ParsedResumeData {
   const source = object(value);
-  if (!source.personal && !PROFILE_RECORD_COLLECTIONS.some(collection => Array.isArray(source[collection]))) throw new Error('AI 返回的内容不是简历资料，请重试');
+  if (!source.personal && !PROFILE_RECORD_COLLECTIONS.some(collection => Array.isArray(source[collection]))) throw new Error('输入内容不是有效的简历资料，请检查文件');
   const result = { personal: strings(source.personal, personalKeys), rawText, skills: Array.isArray(source.skills) ? source.skills.filter((skill): skill is string => typeof skill === 'string' && Boolean(skill.trim())).slice(0, 100).map(skill => skill.trim()) : [] } as ParsedResumeData;
   for (const [collection, keys] of Object.entries(recordKeys)) {
     const records = Array.isArray(source[collection]) ? source[collection] as unknown[] : [];

@@ -9,8 +9,7 @@ import type {
   BackupSummary,
   UserProfile,
 } from './types';
-import type { LLMConfig } from '../services/llm/types';
-import { normalizeUserProfile } from './storage.ts';
+import { normalizeUserProfile, normalizeSettings } from './storage.ts';
 
 export const BACKUP_SCHEMA_VERSION = 1;
 export const MAX_BACKUP_BYTES = 20 * 1024 * 1024;
@@ -127,18 +126,6 @@ function validateUserProfile(value: unknown): value is UserProfile {
   return true;
 }
 
-function validateLLMConfig(value: unknown): value is LLMConfig {
-  if (!isPlainObject(value)) return false;
-  if (!hasOnlyStringFields(value, ['provider', 'apiKey', 'baseUrl', 'model'])) return false;
-  if (!['provider', 'apiKey', 'baseUrl', 'model'].every(field => typeof value[field] === 'string')) {
-    return false;
-  }
-  if (value.temperature !== undefined && typeof value.temperature !== 'number') return false;
-  if (value.maxTokens !== undefined && typeof value.maxTokens !== 'number') return false;
-  if (value.visionEnabled !== undefined && typeof value.visionEnabled !== 'boolean') return false;
-  return true;
-}
-
 function validateV1(value: PlainObject): BackupParseResult {
   if (typeof value.exportedAt !== 'string' || Number.isNaN(Date.parse(value.exportedAt))) {
     return failure('INVALID_EXPORTED_AT', '导出时间无效');
@@ -151,12 +138,9 @@ function validateV1(value: PlainObject): BackupParseResult {
   }
   if (!isPlainObject(value.data)) return failure('INVALID_DATA', '备份数据区域无效');
 
-  const { userProfile, llmConfig, settings, applicationRecords } = value.data;
+  const { userProfile, settings, applicationRecords } = value.data;
   if (userProfile !== null && !validateUserProfile(userProfile)) {
     return failure('INVALID_USER_PROFILE', '个人资料结构无效');
-  }
-  if (llmConfig !== null && !validateLLMConfig(llmConfig)) {
-    return failure('INVALID_LLM_CONFIG', 'AI 配置结构无效');
   }
   if (settings !== null && !isPlainObject(settings)) {
     return failure('INVALID_SETTINGS', '设置数据结构无效');
@@ -172,8 +156,7 @@ function validateV1(value: PlainObject): BackupParseResult {
     source: { extensionVersion: value.source.extensionVersion },
     data: {
       userProfile: userProfile ? normalizeUserProfile(userProfile) : null,
-      llmConfig,
-      settings,
+      settings: normalizeSettings(settings),
     },
   };
   if (applicationRecords !== undefined) {
@@ -193,8 +176,7 @@ export function createBackupDocument(
     source: { extensionVersion },
     data: {
       userProfile: data.userProfile ? normalizeUserProfile(data.userProfile) : null,
-      llmConfig: data.llmConfig,
-      settings: data.settings,
+      settings: normalizeSettings(data.settings),
       applicationRecords: data.applicationRecords ?? [],
     },
   };
@@ -208,18 +190,6 @@ export function serializeBackup(document: BackupDocument): string {
 export function migrateBackupDocument(value: PlainObject): BackupParseResult {
   if (value.schemaVersion === 1) return validateV1(value);
   return failure('UNSUPPORTED_OLD_VERSION', '此旧版备份没有可用的迁移器');
-}
-
-export function normalizeBackupDocument(document: BackupDocument): BackupDocument {
-  return {
-    ...document,
-    data: {
-      ...document.data,
-      userProfile: document.data.userProfile
-        ? normalizeUserProfile(document.data.userProfile)
-        : null,
-    },
-  };
 }
 
 export function parseAndValidateBackup(rawJson: string): BackupParseResult {
@@ -256,7 +226,5 @@ export function createBackupSummary(document: BackupDocument): BackupSummary {
       document.data.userProfile?.resume?.fileData
       || document.data.userProfile?.resumes?.some(resume => resume.fileData),
     ),
-    hasLLMConfig: document.data.llmConfig !== null,
-    hasApiKey: Boolean(document.data.llmConfig?.apiKey),
   };
 }

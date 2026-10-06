@@ -8,7 +8,6 @@ import { createResumeProfileSnapshot } from '../shared/resumes.ts';
 import { AdditionalFactsSection } from './AdditionalFactsSection.tsx';
 import { getPersonalAdditionalFields, PERSONAL_EXTRA_FIELDS } from '../shared/personalFields.ts';
 import { ProfileImportDraft } from './ProfileImportDraft.tsx';
-import { applyProfileImportDraft, type ProfileImportChange } from '../autofill/profileImport.ts';
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageService } from '../shared/message';
 import type {
@@ -17,7 +16,6 @@ import type {
   CustomInformation,
   ParsedResumeData,
 } from '../shared/types';
-import { AISettings } from './AISettings';
 import { EducationSection } from './EducationSection';
 import { ExperienceSection } from './ExperienceSection';
 import { DataBackupSettings } from './DataBackupSettings';
@@ -41,7 +39,6 @@ const PROFILE_SECTIONS = [
   { id: 'more', label: '更多个人资料' },
   { id: 'custom', label: '自定义信息' },
   { id: 'resume', label: '简历附件' },
-  { id: 'ai', label: 'AI 设置' },
   { id: 'data-backup', label: '数据备份' },
 ] as const;
 
@@ -122,7 +119,6 @@ function resizeAutoGrowTextarea(element: HTMLTextAreaElement): void {
 function App() {
   const globalFileInputRef = useRef<HTMLInputElement>(null);
   const [importReviewData, setImportReviewData] = useState<ImportReviewState | null>(null);
-  const [importDraft, setImportDraft] = useState<ProfileImportChange[] | null>(null);
   const [profile, setProfile] = useState<UserProfile>({
     personal: {} as PersonalInfo,
     education: [],
@@ -136,7 +132,6 @@ function App() {
   const [saving, setSaving] = useState(false);
   const initialSectionRef = useRef(getInitialSection());
   const [activeSection, setActiveSection] = useState<ProfileSectionId>(getInitialSection);
-  const [dataRevision, setDataRevision] = useState(0);
   const [parsingResume, setParsingResume] = useState(false);
   const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
   const uploadRef = useRef<{ requestId: string; controller: AbortController } | null>(null);
@@ -144,10 +139,6 @@ function App() {
   const profileRef = useRef(profile); profileRef.current = profile;
   useEffect(() => () => { uploadRef.current?.controller.abort(); if (uploadRef.current) void MessageService.sendMessage({ type: 'CANCEL_RESUME_IMPORT', payload: { requestId: uploadRef.current.requestId } }); }, []);
   const [resumeCategory, setResumeCategory] = useState('');
-  const [resumeNotice, setResumeNotice] = useState<{
-    type: 'info' | 'success' | 'warning' | 'error';
-    text: string;
-  } | null>(null);
   const [saveNotice, setSaveNotice] = useState<{
     type: 'success' | 'error';
     text: string;
@@ -237,7 +228,6 @@ function App() {
 
   const handleExternalDataChange = () => {
     void loadProfile();
-    setDataRevision(revision => revision + 1);
   };
 
   const handleSave = async () => {
@@ -279,7 +269,6 @@ function App() {
       if (response.success) {
         setProfile(next);
         setImportReviewData(null);
-        setImportDraft(null);
         setSaveNotice({ type: 'success', text: '资料已准备好，回到申请页即可一键填写' });
         setImportProgress(null);
       } else {
@@ -387,7 +376,7 @@ function App() {
     }
     const requestId = crypto.randomUUID(), controller = new AbortController();
     uploadRef.current = { requestId, controller }; lastUploadRef.current = file;
-    setParsingResume(true); setResumeNotice(null); setImportReviewData(null); setImportDraft(null);
+    setParsingResume(true); setImportReviewData(null);
     setImportProgress({ stage: 'reading', fileName: file.name, detail: '正在读取文件，识别后会自动预填写资料。' });
     let timedOut = false;
     const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 120_000);
@@ -414,13 +403,13 @@ function App() {
       if (controller.signal.aborted || uploadRef.current?.requestId !== requestId) return;
       if (!extraction.text.trim()) throw new Error('没有识别到文字，请上传更清晰的图片或文字版简历');
       setImportProgress({ stage: 'structuring', fileName: file.name, detail: '正在自动预填写联系方式、教育和工作经历。' });
-      const response = await MessageService.sendMessage<{ parsedData: ParsedResumeData; resumeId?: string; llmError?: string; parseMethod: string }>({ type: 'PARSE_RESUME', payload: {
+      const response = await MessageService.sendMessage<{ parsedData: ParsedResumeData; resumeId?: string; parseMethod: string }>({ type: 'PARSE_RESUME', payload: {
         file: fileData, fileType, fileName: file.name, category: resumeCategory.trim() || '未分类', rawText: extraction.text, requestId,
       } });
       if (controller.signal.aborted || uploadRef.current?.requestId !== requestId) return;
       if (!response.success || !response.data) throw new Error(response.error || '资料整理失败，请重试');
       const result = response.data;
-      if (result.parseMethod === 'regex') extraction.warnings.push(result.llmError ? 'AI 整理暂时未完成，已用本地规则预填写可识别内容。' : '当前未配置 AI，已用本地规则预填写；可在 AI 设置中配置服务以识别更多内容。');
+      if (result.parseMethod === 'regex') extraction.warnings.push('已使用本地规则整理可识别内容，请核对后保存。');
       setImportReviewData({ parsedData: result.parsedData, fileName: file.name, requestId, resumeId: result.resumeId, baseProfile,
         extraction, open: true });
       setImportProgress({ stage: 'review', fileName: file.name, detail: `已整理 ${summarizeParsed(result.parsedData) || '简历文字'}，核对后即可使用。` });
@@ -696,7 +685,7 @@ function App() {
 
               <div className="info-note">
                 可先填写姓名与联系方式，再按需补充经历。你也可以从现有简历提取资料。
-                资料默认保存在本地。使用 AI 解析或辅助填写时，相关文字会发送至你配置的 AI 服务。
+                资料保存在本地，文件识别与表单填写均在浏览器内完成。
               </div>
           </section>
 
@@ -799,23 +788,6 @@ function App() {
               onApply={handleApplyImportDraft}
             />
           )}
-          {!importReviewData && importDraft && importDraft.length > 0 && (
-            <ProfileImportDraft
-              changes={importDraft}
-              currentProfile={profile}
-              onDismiss={() => setImportDraft(null)}
-              onApply={async (_updated) => {
-                const current = await MessageService.sendMessage<UserProfile>({ type: 'GET_USER_PROFILE' });
-                if (!current.success || !current.data) throw new Error(current.error || '无法读取资料');
-                const next = applyProfileImportDraft(current.data, importDraft);
-                const result = await MessageService.sendMessage({ type: 'SAVE_USER_PROFILE', payload: next });
-                if (!result.success) throw new Error(result.error || '保存失败');
-                setProfile(next);
-                setImportDraft(null);
-                setSaveNotice({ type: 'success', text: '已保存确认的资料更新' });
-              }}
-            />
-          )}
           <section id="profile-resume" className="profile-section options-form" aria-label="简历附件" tabIndex={-1}>
               <h2 className="section-title">简历附件</h2>
 
@@ -858,11 +830,6 @@ function App() {
                   />
                 </div>
 
-                {resumeNotice && (
-                  <div className={`resume-notice ${resumeNotice.type}`} role="status" aria-live="polite">
-                    {resumeNotice.text}
-                  </div>
-                )}
 
                 {(profile.resumes || []).length > 0 && (
                   <div className="resume-info">
@@ -904,11 +871,6 @@ function App() {
               </div>
           </section>
 
-          <details id="profile-ai" className="profile-section profile-tool" tabIndex={-1} open={initialSectionRef.current === 'ai'}>
-            <summary><span>AI 设置</span><small>按需配置，用于简历解析与辅助填写</small></summary>
-            <div className="profile-tool-content"><AISettings dataRevision={dataRevision} /></div>
-          </details>
-
           <details id="profile-data-backup" className="profile-section profile-tool" tabIndex={-1} open={initialSectionRef.current === 'data-backup'}>
             <summary><span>数据备份</span><small>导入或导出本地 JSON 备份</small></summary>
             <div className="profile-tool-content"><DataBackupSettings onDataChanged={handleExternalDataChange} /></div>
@@ -917,7 +879,7 @@ function App() {
       </div>
       <footer className="profile-save-bar">
         <div className="profile-save-inner">
-          <div><strong>所有个人资料统一保存</strong><p>修改后点击保存；AI 配置在展开的设置中单独保存。</p></div>
+          <div><strong>所有个人资料统一保存</strong><p>资料保存在本机，修改后请保存全部资料。</p></div>
           <button type="button" onClick={handleSave} disabled={saving} className="btn btn-primary">
             {saving ? '保存中...' : '保存全部资料'}
           </button>

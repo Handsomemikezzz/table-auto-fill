@@ -16,7 +16,7 @@ test('资料编辑在同一页提供所有章节和统一保存入口', () => {
   assert.match(html, /aria-label="资料页内目录"/);
   assert.match(html, /保存全部资料/);
   assert.doesNotMatch(html, /options-tab|role="tab"|role="tabpanel"/);
-  assert.match(html, /<details id="profile-ai"/);
+  assert.doesNotMatch(html, /profile-ai|AI 设置|模型设置|API Key/);
   assert.match(html, /<details id="profile-data-backup"/);
-  assert.doesNotMatch(html, /<details id="profile-(?:ai|data-backup)"[^>]* open/);
+  assert.doesNotMatch(html, /<details id="profile-data-backup"[^>]* open/);
 });

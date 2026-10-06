@@ -24,7 +24,7 @@ export async function bridgeFillPage(payload: Record<string, any>, sender: chrom
       // Inaccessible frames stay visible in the completion denominator.
       results.forEach((result, index) => {
         if (result.status === 'fulfilled') return;
-        fields.push({ fieldId: `${frames[index].frameId}/unavailable`, groupId: `${frames[index].frameId}/unavailable`, frameId: String(frames[index].frameId), snapshotVersion: 'unavailable', signature: 'unavailable', groupLabel: '嵌入表单', label: '无法读取的页面框架', context: '', kind: 'unsupported', required: false, currentValue: '', disabled: true, options: [], optionsState: 'unread', candidates: ['unknown'] });
+        fields.push({ fieldId: `${frames[index].frameId}/unavailable`, groupId: `${frames[index].frameId}/unavailable`, frameId: String(frames[index].frameId), snapshotVersion: 'unavailable', signature: 'unavailable', groupLabel: '嵌入表单', label: '无法读取的页面框架', context: '', kind: 'unsupported', required: false, currentValue: '', disabled: true, options: [], optionsState: 'unread' });
       });
       return fields;
     }

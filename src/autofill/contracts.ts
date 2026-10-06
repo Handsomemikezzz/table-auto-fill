@@ -8,7 +8,6 @@ export interface FieldDefinition {
   sourceCollection: string;
   key: string;
   aliases: string[];
-  allowedTransformations: string[];
   scope: 'builtin' | 'user';
   version: number;
   provenance: string;
@@ -59,9 +58,7 @@ export interface FieldObservation {
   disabled: boolean;
   options: ControlOption[];
   optionsState: 'unread' | 'partial' | 'complete';
-  candidates: string[];
   ruleBinding?: { meaningId: string; recordId?: string; confidence: number };
-  evidence?: string[];
 }
 export interface FieldDecision {
   decisionId: string;
@@ -72,12 +69,7 @@ export interface FieldDecision {
   recordId?: string;
   factId?: string;
   targetOptionIds?: string[];
-  dependencyIds: string[];
-  expectedResult?: string;
-  nextAction: 'write' | 'select' | 'readOptions' | 'requestFact' | 'requestMeaning' | 'manual';
-  evidenceIds: string[];
-  uncertaintyReason?: string;
-  modelId: string;
+  nextAction: 'write' | 'requestFact';
   registryVersion: string;
   profileVersion: string;
 }
@@ -98,17 +90,11 @@ export interface DecisionRequest {
   registry: FieldDefinition[];
   registryVersion: string;
   corrections: MeaningCorrection[];
-  executionEvidence?: ControlExperience[];
   establishedBindings?: { groupId: string; meaningId: string; recordId?: string; factId: string }[];
-}
-export interface DecisionProvider {
-  readonly id: string;
-  decide(request: DecisionRequest, signal: AbortSignal): Promise<FieldDecision[]>;
 }
 export interface FillContextData {
   sessionId: string;
   saveProfileVersion?: string;
-  modelAvailable?: boolean;
   corrections?: MeaningCorrection[];
   profile: ProfileSnapshot;
   registry: FieldDefinition[];
@@ -124,7 +110,7 @@ export interface SessionItem {
   decisionAttempts?: number;
   resolvedBinding?: FieldObservation['resolvedBinding'];
 }
-export type SessionPhase = 'understanding' | 'rules' | 'matching' | 'writing' | 'complete' | 'stopped';
+export type SessionPhase = 'understanding' | 'rules' | 'writing' | 'complete' | 'stopped';
 /** Read-only diagnostics. Never include profile values or webpage answers. */
 export interface FillSessionResult {
   schemaVersion: 1;
@@ -132,7 +118,6 @@ export interface FillSessionResult {
   phase: SessionPhase;
   busy: boolean;
   settled: boolean;
-  modelRequests: number;
   counts: { verified: number; assisted: number; skipped: number; existing: number; missing: number; todo: number };
   fields: { fieldId: string; status: SessionItem['status']; outcome?: FillOutcome['status']; meaningId?: string; recordId?: string }[];
 }
@@ -141,18 +126,4 @@ export function versionOf(value: unknown): string {
   let hash = 2166136261;
   for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 16777619);
   return (hash >>> 0).toString(16);
-}
-
-/** Execution evidence contains no answer, label, HTML or raw website encoding. */
-export interface ControlExperience {
-  id: string;
-  origin: string;
-  signature: string;
-  registryVersion: string;
-  profileVersion: string;
-  adapterId: string;
-  action: 'write' | 'select';
-  modelId: string;
-  verifiedAt: string;
-  enabled: boolean;
 }

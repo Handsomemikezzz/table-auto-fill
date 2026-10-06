@@ -1,5 +1,4 @@
-import type { ControlExperience, AdditionalFact, FieldObservation, MeaningCorrection } from '../autofill/contracts.ts';
-import type { ControlOption } from './fillModel.ts';
+import type { AdditionalFact } from '../autofill/contracts.ts';
 // 用户资料数据模型
 export interface UserProfile extends SupplementalProfile {
   additionalFacts?: AdditionalFact[];
@@ -136,25 +135,10 @@ export interface ResumeVariant extends ResumeInfo {
   parsedProfile?: ResumeProfileSnapshot;
 }
 
-import type { LLMConfig } from '../services/llm/types';
-
 export type SettingsData = Record<string, unknown>;
-
-export interface LearnedFieldValue {
-  signature: string;
-  label: string;
-  value: string;
-  /** 当地规则识别出的字段类型；unknown 表示需依靠标签或 AI 规则。 */
-  fieldType?: string;
-  profilePath?: string;
-  /** Protect collection bindings when entries are reordered or a resume changes. */
-  profileRecordId?: string;
-  updatedAt: string;
-}
 
 export interface BackupData {
   userProfile: UserProfile | null;
-  llmConfig: LLMConfig | null;
   settings: SettingsData | null;
   /** Opaque legacy backup data; the application-tracking feature has been removed. */
   applicationRecords?: Record<string, unknown>[] | null;
@@ -183,7 +167,6 @@ export type BackupErrorCode =
   | 'INVALID_SOURCE'
   | 'INVALID_DATA'
   | 'INVALID_USER_PROFILE'
-  | 'INVALID_LLM_CONFIG'
   | 'INVALID_SETTINGS';
 
 export interface BackupParseError {
@@ -201,12 +184,6 @@ export interface BackupSummary {
   extensionVersion: string;
   hasUserProfile: boolean;
   hasResumeFile: boolean;
-  hasLLMConfig: boolean;
-  hasApiKey: boolean;
-}
-
-export interface LocalSaveResult {
-  localSaved: true;
 }
 
 export type FocusedFieldFailureReason =
@@ -224,100 +201,13 @@ export interface FocusedFieldWriteResult {
   reason?: FocusedFieldFailureReason;
 }
 
-export interface VisualRegionControlPayload {
-  sessionId?: string;
-  tabId?: number;
-}
-
-export interface VisualRegionSelectionRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  viewportWidth?: number;
-  viewportHeight?: number;
-}
-
-export interface VisualRegionImagePayload {
-  base64: string;
-  mimeType: string;
-  width: number;
-  height: number;
-}
-
-export interface VisualRegionControlRect {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
-
-export interface VisualRegionControlCandidate {
-  controlId: string;
-  tagName: string;
-  label: string;
-  name: string;
-  placeholder: string;
-  options: string[];
-  optionCandidates?: ControlOption[];
-  optionsComplete?: boolean;
-  semantic?: string;
-  recordId?: string;
-  recordCollection?: 'education' | 'experience' | 'projects';
-  blockId?: string;
-  rect: VisualRegionControlRect;
-  contextText: string;
-}
-
-export interface VisualRegionFillMapping {
-  controlId: string;
-  fieldMeaning: string;
-  matchedProfilePath: string;
-  value: string;
-  optionId?: string;
-}
-
-interface VisualRegionFillPayloadBase {
-  requestId?: string;
-  domain?: string;
-  controls: VisualRegionControlCandidate[];
-  imageDataUrl?: string;
-  region: VisualRegionSelectionRect;
-  instruction?: string;
-  pageContext?: string;
-  targetLabel?: string;
-}
-
-export interface VisualRegionFillPayload extends VisualRegionFillPayloadBase {
-  image: VisualRegionImagePayload;
-}
-
-export interface VisualRegionFillRequestPayload extends VisualRegionFillPayloadBase {}
-
-export interface VisualRegionFillResult {
-  value: string;
-  confidence?: number;
-  model?: string;
-}
-
-export interface VisualRegionFillMappingResult {
-  mappings: VisualRegionFillMapping[];
-}
-
 // 消息类型定义
 export type Message =
   | { type: 'GET_FILL_SESSION_RESULT'; payload?: { sessionId?: string } }
   | { type: 'FILL_PAGE_BRIDGE'; payload: Record<string, any> }
   | { type: 'FILL_LOCAL_BRIDGE'; payload: Record<string, any> }
   | { type: 'BEGIN_FILL_SESSION'; payload: { sessionId: string; sourceId: string; origin: string; attachmentId?: string | null } }
-  | { type: 'DECIDE_FILL_FIELDS'; payload: { sessionId: string; fields: FieldObservation[]; corrections?: MeaningCorrection[]; establishedBindings?: import('../autofill/contracts.ts').DecisionRequest['establishedBindings'] } }
   | { type: 'END_FILL_SESSION'; payload: { sessionId: string } }
-  | { type: 'SAVE_MEANING_CORRECTION'; payload: MeaningCorrection }
-  | { type: 'GET_CONTROL_EXPERIENCES'; payload?: null }
-  | { type: 'SAVE_CONTROL_EXPERIENCES'; payload: ControlExperience[] }
-  | { type: 'UPDATE_CONTROL_EXPERIENCE'; payload: { id: string; enabled?: boolean; remove?: boolean } }
-  | { type: 'GET_MEANING_CORRECTIONS'; payload?: null }
-  | { type: 'UPDATE_MEANING_CORRECTION'; payload: { id: string; enabled?: boolean; remove?: boolean } }
   | { type: 'SAVE_PERSONAL_FIELD'; payload: { label: string; value: string; valueType?: 'text' | 'date'; expectedValue?: string } }
   | { type: 'SAVE_ADDITIONAL_FACT'; payload: { fact: AdditionalFact; profileVersion: string } }
   | { type: 'START_FILL_SESSION'; payload: { sourceId: string; attachmentId?: string | null; region?: boolean } }
@@ -327,68 +217,14 @@ export type Message =
   | { type: 'PARSE_RESUME'; payload: { file: string; fileType: string; fileName: string; category?: string; rawText?: string; requestId?: string } }
   | { type: 'CANCEL_RESUME_IMPORT'; payload: { requestId: string } }
   | { type: 'FILL_FORM'; payload?: { reusePreview?: boolean; resumeId?: string | null } | null }
-  | { type: 'PREVIEW_FILL'; payload?: { resumeId?: string | null } | null }
   | { type: 'UNDO_LAST_FILL'; payload?: null }
   | { type: 'PING_CONTENT'; payload?: null }
   | { type: 'OPEN_INFO_OVERLAY'; payload?: { resumeId?: string | null } | null }
   | { type: 'SET_INFO_OVERLAY_RESUME'; payload: { resumeId?: string | null } }
   | { type: 'ENSURE_CONTENT_SCRIPT'; payload: { tabId: number } }
-  | { type: 'GET_LEARNED_FIELD_VALUES'; payload: { domain: string } }
-  | {
-      type: 'SAVE_LEARNED_FIELD_VALUE';
-      payload: {
-        domain: string;
-        entry: LearnedFieldValue;
-        saveAsProfileInformation?: boolean;
-        recognitionHint?: string;
-      };
-    }
-  | { type: 'GET_FIELD_RECOGNITION_RULES'; payload?: null }
-  | { type: 'SAVE_FIELD_RECOGNITION_RULES'; payload: { markdown: string } }
-  | {
-      type: 'SAVE_FIELD_RECOGNITION_HINT';
-      payload: { domain: string; signature: string; label: string; hint: string };
-    }
-  | { type: 'START_AI_PAGE_FILL'; payload?: { resumeId?: string | null } | null }
   | { type: 'DETECT_FIELDS'; payload?: null }
-  | { type: 'START_AI_REGION_FILL'; payload?: VisualRegionControlPayload | null }
-  | { type: 'AI_FILL_VISUAL_REGION'; payload: VisualRegionFillPayload | VisualRegionFillRequestPayload }
-  | { type: 'CROP_IMAGE_OFFSCREEN'; payload: { imageDataUrl: string; selectionRect: VisualRegionSelectionRect } }
-  | { type: 'WRITE_FOCUSED_FIELD'; payload: { tabId: number; value: string } }
   | { type: 'WRITE_FOCUSED_FIELD_FROM_PAGE'; payload: { value: string } }
-  | { type: 'APPLY_FOCUSED_FIELD'; payload: VisualRegionFillResult }
-  | { type: 'GET_RESUME_DATA'; payload?: null }
-  | { type: 'GENERATE_ANSWER'; payload: { questionText: string; context?: string; fieldMaxLength?: number; language?: 'zh' | 'en' } }
-  | { type: 'MATCH_FIELDS_LLM'; payload: { fields: Array<{ index: number; name: string; id: string; placeholder: string; labelText: string; type: string; contextText?: string }>; domain: string } }
-  | {
-      type: 'AI_FILL_SECTION';
-      payload: {
-        requestId: string;
-        resumeId?: string | null;
-        section: string;
-        fields: Array<{
-          index: number;
-          rowIndex: number;
-          name: string;
-          label: string;
-          type: string;
-          options: string[];
-          optionCandidates?: ControlOption[];
-          optionsComplete?: boolean;
-          semantic?: string;
-          recordId?: string;
-          recordCollection?: 'education' | 'experience' | 'projects';
-          context: string;
-          blockId?: string;
-          blockContext?: string;
-        }>;
-        domain: string;
-      };
-    }
-  | { type: 'CANCEL_AI_FILL'; payload: { requestId: string } }
-  | { type: 'GET_LLM_CONFIG'; payload?: null }
-  | { type: 'SAVE_LLM_CONFIG'; payload: LLMConfig }
-  | { type: 'TEST_LLM_CONNECTION'; payload?: LLMConfig | null }
+  | { type: 'APPLY_FOCUSED_FIELD'; payload: { value: string } }
   | { type: 'EXPORT_BACKUP'; payload?: null }
   | { type: 'PREVIEW_BACKUP_IMPORT'; payload: { json: string } }
   | { type: 'IMPORT_BACKUP'; payload: { json: string } };
@@ -402,61 +238,54 @@ export interface MessageResponse<T = any> {
 // 表单字段检测结果
 export interface DetectedField {
   element: HTMLElement;
-  /** Resolved accessible label, shared with record binding and AI descriptions. */
+  /** Resolved accessible label, shared with record binding. */
   label?: string;
   fieldType: string;
   confidence: number;
   value?: string;
 }
 
-export interface FillPreviewItem {
-  fieldType: string;
-  label: string;
-  value: string;
-}
+export const FieldType = {
+  NAME: 'name',
+  GENDER: 'gender',
+  BIRTH_DATE: 'birthDate',
+  PHONE: 'phone',
+  EMAIL: 'email',
+  WECHAT: 'wechat',
+  ID_CARD: 'idCard',
+  POLITICAL_STATUS: 'politicalStatus',
+  ETHNICITY: 'ethnicity',
+  HOMETOWN: 'hometown',
+  CURRENT_ADDRESS: 'currentAddress',
+  SCHOOL: 'school',
+  COLLEGE: 'college',
+  EDUCATION_TYPE: 'educationType',
+  MAJOR: 'major',
+  MAJOR_CATEGORY: 'majorCategory',
+  DEGREE: 'degree',
+  ACADEMIC_DEGREE: 'academicDegree',
+  GPA: 'gpa',
+  SELF_EVALUATION: 'selfEvaluation',
+  EDUCATION_START_DATE: 'educationStartDate',
+  GRADUATION_DATE: 'graduationDate',
+  COMPANY: 'company',
+  POSITION: 'position',
+  START_DATE: 'startDate',
+  END_DATE: 'endDate',
+  DESCRIPTION: 'description',
+  PROJECT_NAME: 'projectName',
+  PROJECT_ROLE: 'projectRole',
+  PROJECT_START_DATE: 'projectStartDate',
+  PROJECT_END_DATE: 'projectEndDate',
+  PROJECT_DESCRIPTION: 'projectDescription',
+  PROJECT_ACHIEVEMENTS: 'projectAchievements',
+  PROJECT_TECHNOLOGIES: 'projectTechnologies',
+  SKILLS: 'skills',
+  RESUME_FILE: 'resumeFile',
+  UNKNOWN: 'unknown'
+} as const;
+export type FieldType = typeof FieldType[keyof typeof FieldType];
 
-// 字段类型枚举
-export enum FieldType {
-  NAME = 'name',
-  GENDER = 'gender',
-  BIRTH_DATE = 'birthDate',
-  PHONE = 'phone',
-  EMAIL = 'email',
-  WECHAT = 'wechat',
-  ID_CARD = 'idCard',
-  POLITICAL_STATUS = 'politicalStatus',
-  ETHNICITY = 'ethnicity',
-  HOMETOWN = 'hometown',
-  CURRENT_ADDRESS = 'currentAddress',
-  SCHOOL = 'school',
-  COLLEGE = 'college',
-  EDUCATION_TYPE = 'educationType',
-  MAJOR = 'major',
-  MAJOR_CATEGORY = 'majorCategory',
-  DEGREE = 'degree',
-  ACADEMIC_DEGREE = 'academicDegree',
-  GPA = 'gpa',
-  SELF_EVALUATION = 'selfEvaluation',
-  EDUCATION_START_DATE = 'educationStartDate',
-  GRADUATION_DATE = 'graduationDate',
-  COMPANY = 'company',
-  POSITION = 'position',
-  START_DATE = 'startDate',
-  END_DATE = 'endDate',
-  DESCRIPTION = 'description',
-  PROJECT_NAME = 'projectName',
-  PROJECT_ROLE = 'projectRole',
-  PROJECT_START_DATE = 'projectStartDate',
-  PROJECT_END_DATE = 'projectEndDate',
-  PROJECT_DESCRIPTION = 'projectDescription',
-  PROJECT_ACHIEVEMENTS = 'projectAchievements',
-  PROJECT_TECHNOLOGIES = 'projectTechnologies',
-  SKILLS = 'skills',
-  RESUME_FILE = 'resumeFile',
-  UNKNOWN = 'unknown'
-}
-
-// 简历解析结果
 export interface ParsedResumeData {
   /** Ambiguous research entries need an explicit review choice before becoming profile facts. */
   publicationCandidates?: Partial<PublicationInfo>[];

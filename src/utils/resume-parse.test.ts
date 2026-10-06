@@ -161,3 +161,21 @@ test('无章节标题的简历回退到全文扫描', () => {
   assert.equal(parsed.experience?.[0].position, '后端工程师');
   assert.equal(parsed.experience?.[0].endDate, '至今');
 });
+
+
+test('教育和项目日期不能推断为出生日期，英语正文不能推断为姓名', () => {
+  for (const text of [
+    '姓名：张三\n教育经历\n复旦大学 本科 2018-09 - 2022-06',
+    '项目研究 Project\nBased on Real-Time Data\n2026.09',
+    '联系方式\nexample@example.com\n项目经历\n2020.09 - 2021.06',
+  ]) {
+    const personal = NLPHelper.parseResumeText(text).personal || {};
+    assert.equal(personal.birthDate, undefined);
+    assert.notEqual(personal.name, 'Based');
+  }
+});
+
+test('无标签起止日期不会因正则回溯被截断成出生月份', () => {
+  assert.equal(NLPHelper.extractUnlabeledFields('2018-09 - 2022-06').birthDate, undefined);
+  assert.equal(NLPHelper.extractUnlabeledFields('2002年5月').birthDate, '2002-05');
+});

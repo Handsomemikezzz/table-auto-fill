@@ -22,33 +22,14 @@ await build({
   build: {
     outDir: fixtureDir,
     emptyOutDir: true,
-    rollupOptions: { input: resolve(projectRoot, 'tests/form-fill/index.html') },
+    rollupOptions: { input: { form: resolve(projectRoot, 'tests/form-fill/index.html'), dates: resolve(projectRoot, 'tests/form-fill/date-range-regression.html') } },
   },
 });
-let modelRequests = [];
-let modelMode = 'normal';
-let modelDelay = 0;
+const networkRequests = [];
 const fixtureServer = createServer(async (request, response) => {
-  if (request.url === '/v1/chat/completions') {
-    let body = '';
-    for await (const chunk of request) body += chunk;
-    const input = JSON.parse(body);
-    const context = JSON.parse(input.messages.at(-1).content);
-    modelRequests.push(context);
-    if (modelDelay) await delay(modelDelay);
-    if (modelMode === 'fail-first' && modelRequests.length === 1) { response.writeHead(503, { 'Content-Type': 'application/json' }); response.end(JSON.stringify({ error: { message: 'fixture module failure' } })); return; }
-    const decisions = context.fields.map(field => {
-      const text = `${field.groupLabel} ${field.label} ${field.context}`;
-      let meaning = /姓名|怎么称呼/.test(field.label) ? 'personal.name' : /性别/.test(field.label) ? 'personal.gender' : /出生/.test(field.label) ? 'personal.birthDate' : /邮箱/.test(field.label) ? 'personal.email' : field.kind === 'file' ? 'attachment.resumeFile' : /学校/.test(field.label) ? 'education.school' : /入学|起止|毕业/.test(field.label) ? 'education.' + (/毕业|结束/.test(field.label) || /end\s*$/.test(field.context) ? 'endDate' : 'startDate') : '';
-      if (field.label.startsWith('起止时间') && /工作/.test(text)) meaning = /end/.test(field.context) ? 'experience.endDate' : 'experience.startDate';
-      const facts = context.profile.facts.filter(fact => fact.meaningId === meaning);
-      const fact = /研究生|硕士/.test(text) ? facts.find(fact => fact.recordId === 'edu-graduate') || facts[0] : facts[0];
-      const option = fact && field.options.find(option => option.label === fact.value);
-      const choice = ['select', 'radio', 'checkbox', 'combobox'].includes(field.kind);
-      return { fieldId: field.fieldId, snapshotVersion: field.snapshotVersion, meaningId: fact?.meaningId, subject: fact?.subject, recordId: fact?.recordId, factId: modelMode === 'invented' ? 'not-a-real-fact' : fact?.id, nextAction: !fact ? 'requestFact' : choice ? option ? 'select' : field.optionsState !== 'complete' ? 'readOptions' : 'manual' : 'write', targetOptionIds: option ? [option.id] : undefined, dependencyIds: [], evidenceIds: [], value: '模型编造值不得写入' };
-    });
-    response.writeHead(200, { 'Content-Type': 'application/json' });
-    response.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ decisions }) }, finish_reason: 'stop' }] }));
+  if (request.url.startsWith('/v1/')) {
+    networkRequests.push(request.url);
+    response.writeHead(410).end('Model integration has been removed');
     return;
   }
   const pathname = new URL(request.url || '/', 'http://127.0.0.1').pathname;
@@ -131,17 +112,17 @@ async function prepareExtension(scenario) {
       ...profile.personal,
       ...(scenario === 'picker-day' ? { birthDate: '2000-06-15' } : {}),
       ...(['cascader', 'ant-cascader'].includes(scenario) ? { currentAddress: '四川省 / 成都市 / 武侯区' } : {}),
-      ...(scenario === 'ai-cancel' ? { email: 'cancel@example.com' } : {}),
+      ...(scenario === 'fill-cancel' ? { email: 'cancel@example.com' } : {}),
     },
     ...(scenario === 'feishu-deep-range' ? {
       education: [{ ...profile.education[0], startDate: '2018.8', endDate: '2022.6' }],
       experience: [{ id: 'work-1', company: '', position: '', startDate: '2022.7', endDate: '2023.9', description: '' }],
     } : {}),
-    ...(scenario === 'ai-cancel' ? { resume: { fileName: 'cancel.pdf', fileData: 'data:application/pdf;base64,JVBERi0xLjQ=', fileType: 'pdf', uploadDate: '2026-09-28T00:00:00.000Z' } } : {}),
+    ...(scenario === 'fill-cancel' ? { resume: { fileName: 'cancel.pdf', fileData: 'data:application/pdf;base64,JVBERi0xLjQ=', fileType: 'pdf', uploadDate: '2026-09-28T00:00:00.000Z' } } : {}),
   };
   await background.evaluate(`(async () => {
     await chrome.storage.local.clear();
-    await chrome.storage.local.set({ userProfile: ${JSON.stringify(fixtureProfile)}, llmConfig: { provider: 'custom', model: 'fixture-model', apiKey: 'fixture-only', baseUrl: ${JSON.stringify(fixtureUrl.split('/tests/')[0] + '/v1')} } });
+    await chrome.storage.local.set({ userProfile: ${JSON.stringify(fixtureProfile)} });
   })()`);
 }
 async function makeNameUnknown() {
@@ -159,7 +140,6 @@ async function waitForSession(url = fixtureUrl) {
   return waitFor(async () => { const result = await readSession(url); return result?.settled && result; }, '填写会话结束', 30000);
 }
 async function extensionFill(scenario) {
-  modelRequests = []; modelMode = 'normal'; modelDelay = 0;
   await prepareExtension(scenario);
   const response = await background.evaluate(`(async () => {
     const tab = (await chrome.tabs.query({ url: ${JSON.stringify(fixtureUrl + '*')} }))[0];
@@ -291,16 +271,26 @@ try {
     assert.equal((await page.evaluate('window.formFixture.snapshot()')).state.gender, '0');
   });
   await check('后续字段联动清空前一字段时重新验证扣除成功数', async () => {
-    await render('linked');
-    await page.evaluate('window.formFixture.beginFiller()');
-    assert.equal(await page.evaluate("window.formFixture.fillViaFiller('#name', '测试用户')"), 1);
-    assert.equal(await page.evaluate("window.formFixture.fillViaFiller('#email', 'test@example.com')"), 1);
-    const result = await page.evaluate('window.formFixture.revalidateFiller()');
-    assert.equal(result.count, 1, JSON.stringify(result));
-    assert(result.failures.some(failure => failure.label === '姓名'), JSON.stringify(result));
-    assert.equal((await page.evaluate('window.formFixture.snapshot()')).state.name, '');
+    await prepareExtension('linked');
+    await background.evaluate(`(async () => {
+      const stored = await chrome.storage.local.get('userProfile');
+      await chrome.storage.local.set({ userProfile: { ...stored.userProfile, personal: { ...stored.userProfile.personal, email: 'test@example.com' } } });
+      const tab = (await chrome.tabs.query({ url: ${JSON.stringify(fixtureUrl + '*')} }))[0];
+      await chrome.tabs.sendMessage(tab.id, { type: 'START_FILL_SESSION', payload: { sourceId: 'default' } }, { frameId: 0 });
+    })()`);
+    const result = await waitForSession();
+    assert.equal(result.counts.verified, 1);
+    assert.equal(result.fields.find(field => field.meaningId === 'personal.name').status, 'todo');
+    const snapshot = await page.evaluate('window.formFixture.snapshot()');
+    assert.equal(snapshot.state.name, ''); assert.equal(snapshot.state.email, 'test@example.com');
   });
-
+  await check('日期专项页面使用当前观察器和会话控制器，五项检查全部通过', async () => {
+    await page.send('Page.navigate', { url: fixtureUrl.replace('index.html', 'date-range-regression.html') });
+    await waitFor(() => page.evaluate("Boolean(document.querySelector('#edu-a'))"), '日期专项页面挂载');
+    await page.evaluate("document.querySelector('#run').click()");
+    const status = await waitFor(() => page.evaluate("(() => { const text = document.querySelector('#status').textContent; return /全部通过|项失败/.test(text) && { text, results: document.querySelector('#results').textContent }; })()"), '日期专项五项检查', 30000);
+    assert.equal(status.text, '5 项全部通过', status.results);
+  });
   for (const [scenario, key, value] of [
     ['react-text', 'name', '测试用户'],
     ['select-zero', 'gender', '0'],
@@ -318,8 +308,7 @@ try {
       if (snapshot.state[key] !== value) console.error(JSON.stringify(await page.evaluate('window.formFixture.diagnose()')));
       assert.equal(snapshot.state[key], value, JSON.stringify({ response, snapshot }));
       assert.equal(response.data?.verifiedCount, 1, JSON.stringify(response));
-      assert.equal(modelRequests.length, 0, '明确的规则匹配不应请求模型');
-      assert(modelRequests.every(request => request.profile.facts && !JSON.stringify(request).includes('fileData')), '模型只接收事实，不接收附件内容');
+      assert.equal(networkRequests.length, 0, '规则填写不应产生模型请求');
     });
   }
   await check('扩展 FILL_FORM：飞书深层起止框与失焦日期格式化', async () => {
@@ -347,40 +336,32 @@ try {
       assert(response.data?.failures?.length > 0, JSON.stringify(response));
     });
   }
-  await check('模型返回不存在的事实时不填写', async () => {
-    await prepareExtension('react-text'); await makeNameUnknown(); modelMode = 'invented';
+  await check('规则无法确定的字段保持空白，已知字段仍正常填写', async () => {
+    await prepareExtension('react-text'); await makeNameUnknown();
     await background.evaluate(`(async () => { const tab = (await chrome.tabs.query({ url: ${JSON.stringify(fixtureUrl + '*')} }))[0]; return chrome.tabs.sendMessage(tab.id, { type: 'START_FILL_SESSION', payload: { sourceId: 'default' } }, { frameId: 0 }); })()`);
-    await waitForSession();
+    const result = await waitForSession();
     assert.equal((await page.evaluate('window.formFixture.snapshot()')).state.name || '', '');
-    modelMode = 'normal';
-  });
-  await check('未配置模型仍然完成规则填写', async () => {
-    await prepareExtension('react-text');
-    await background.evaluate("chrome.storage.local.remove('llmConfig')");
-    await background.evaluate(`(async () => { const tab = (await chrome.tabs.query({ url: ${JSON.stringify(fixtureUrl + '*')} }))[0]; return chrome.tabs.sendMessage(tab.id, { type: 'FILL_FORM' }, { frameId: 0 }); })()`);
-    await waitForSession();
-    assert.equal((await page.evaluate('window.formFixture.snapshot()')).state.name, '测试用户');
+    assert.equal(result.counts.todo, 1); assert.equal(networkRequests.length, 0);
   });
   await check('停止本地填写后不再填写后续字段或上传附件', async () => {
-    await prepareExtension('ai-cancel'); modelRequests = []; modelDelay = 1000;
+    await prepareExtension('fill-cancel');
     await background.evaluate(`(async () => { const tab = (await chrome.tabs.query({ url: ${JSON.stringify(fixtureUrl + '*')} }))[0]; return chrome.tabs.sendMessage(tab.id, { type: 'START_FILL_SESSION', payload: { sourceId: 'default', attachmentId: 'legacy-resume' } }, { frameId: 0 }); })()`);
     await waitFor(() => page.evaluate("document.querySelector('#name')?.value === '测试用户'"), '本地填写首项');
     await page.evaluate("Array.from(document.querySelector('[data-job-applymate-task]').shadowRoot.querySelectorAll('button')).find(button => button.textContent === '停止').click()");
     await delay(1300);
     const snapshot = await page.evaluate("({ ...window.formFixture.snapshot(), files: document.querySelector('#resume').files.length })");
     assert.equal(snapshot.state.name, '测试用户'); assert.equal(snapshot.state.email || '', ''); assert.equal(snapshot.files, 0);
-    modelDelay = 0;
   });
   await check('所选附件独立上传，仍使用通用资料', async () => {
-    await prepareExtension('ai-cancel'); modelRequests = [];
+    await prepareExtension('fill-cancel');
     await background.evaluate(`(async () => { const tab = (await chrome.tabs.query({ url: ${JSON.stringify(fixtureUrl + '*')} }))[0]; return chrome.tabs.sendMessage(tab.id, { type: 'START_FILL_SESSION', payload: { sourceId: 'default', attachmentId: 'legacy-resume' } }, { frameId: 0 }); })()`);
     await waitForSession();
     assert.equal(await page.evaluate("document.querySelector('#resume').files[0]?.name"), 'cancel.pdf');
     assert.equal((await page.evaluate('window.formFixture.snapshot()')).state.name, '测试用户');
-    assert.equal(modelRequests.length, 0);
+    assert.equal(networkRequests.length, 0);
   });
   await check('跨 frame 共用单个任务面板并优先规则填写', async () => {
-    await prepareExtension('react-text'); modelRequests = [];
+    await prepareExtension('react-text');
     await page.evaluate(`(() => { const frame = document.createElement('iframe'); frame.src = ${JSON.stringify(fixtureUrl + '?scenario=react-text')}; document.body.append(frame); })()`);
     await waitFor(() => page.evaluate("Boolean(document.querySelector('iframe').contentWindow.formFixture)"), '子框架加载');
     await background.evaluate(`(async () => { const tab = (await chrome.tabs.query({ url: ${JSON.stringify(fixtureUrl + '*')} }))[0]; return chrome.tabs.sendMessage(tab.id, { type: 'START_FILL_SESSION', payload: { sourceId: 'default' } }, { frameId: 0 }); })()`);
@@ -389,59 +370,29 @@ try {
     assert.equal(await page.evaluate("document.querySelector('iframe').contentWindow.formFixture.snapshot().state.name"), '测试用户');
   });
   for (const [scenario, key, expected] of [['existing-text', 'name', '用户原有姓名'], ['existing-radio', 'gender', 'f']]) {
-    await check(`模型主路径保留原有答案：${scenario}`, async () => {
+    await check(`规则填写保留原有答案：${scenario}`, async () => {
       const { response, snapshot } = await extensionFill(scenario);
       assert.equal(snapshot.state[key], expected);
       assert.equal(response.data.verifiedCount, 0);
       assert.equal(response.data.result.counts.existing, 1);
     });
   }
-  await check('模型等待期间的用户编辑保持原样', async () => {
-    await prepareExtension('react-text'); await makeNameUnknown(); modelRequests = []; modelDelay = 500;
-    await background.evaluate(`(async () => { const tab = (await chrome.tabs.query({ url: ${JSON.stringify(fixtureUrl + '*')} }))[0]; return chrome.tabs.sendMessage(tab.id, { type: 'START_FILL_SESSION', payload: { sourceId: 'default' } }, { frameId: 0 }); })()`);
-    await waitFor(() => modelRequests.length > 0, '模型请求开始');
-    await page.evaluate("document.querySelector('#answer').focus()");
-    await page.send('Input.insertText', { text: '用户决定保留的姓名' });
-    await waitForSession();
-    assert.equal((await page.evaluate('window.formFixture.snapshot()')).state.name, '用户决定保留的姓名');
-    assert.equal((await readSession()).counts.verified, 0);
-    modelDelay = 0;
-    const screenshot = await page.send('Page.captureScreenshot', { format: 'png' });
-    writeFileSync('/tmp/job-applymate-task-panel.png', Buffer.from(screenshot.data, 'base64'));
-  });
-  await check('模型兜底只接收剩余字段，失败后继续下一模块', async () => {
-    await prepareExtension('react-text'); modelRequests = []; modelMode = 'fail-first';
-    await page.evaluate(`(() => {
-      for (const id of ['a', 'b']) {
-        const group = document.createElement('fieldset'); const legend = document.createElement('legend'); legend.textContent = '模块 ' + id; group.append(legend);
-        const label = document.createElement('label'); label.htmlFor = id; label.textContent = '怎么称呼你'; group.append(label);
-        const input = document.createElement('input'); input.id = id; group.append(input); document.querySelector('form').append(group);
-      }
-    })()`);
-    await background.evaluate(`(async () => { const tab = (await chrome.tabs.query({ url: ${JSON.stringify(fixtureUrl + '*')} }))[0]; return chrome.tabs.sendMessage(tab.id, { type: 'START_FILL_SESSION', payload: { sourceId: 'default' } }, { frameId: 0 }); })()`);
-    await waitForSession();
-    assert.equal(await page.evaluate("document.querySelector('#name').value"), '测试用户');
-    assert.equal(await page.evaluate("document.querySelector('#a').value"), '');
-    assert.equal(await page.evaluate("document.querySelector('#b').value"), '测试用户');
-    assert(modelRequests.every(request => request.fields.every(field => field.label === '怎么称呼你')));
-    assert.equal(modelRequests.length, 2);
-    modelMode = 'normal';
-  });
   await check('补充个人资料后跨网站复用，没提供的字段保持空白', async () => {
-    await prepareExtension('personal-extra'); modelRequests = []; modelMode = 'normal';
+    await prepareExtension('personal-extra');
     const start = async (url = fixtureUrl) => background.evaluate(`(async () => { const tab = (await chrome.tabs.query({ url: ${JSON.stringify(url + '*')} }))[0]; return chrome.tabs.sendMessage(tab.id, { type: 'START_FILL_SESSION', payload: { sourceId: 'default' } }, { frameId: 0 }); })()`);
     await start();
     await waitForSession();
     assert.equal(await page.evaluate("document.querySelector('#age').value"), '');
     assert.equal(await page.evaluate("document.querySelector('#preferredCities').value"), '');
-    assert.equal(modelRequests.length, 1, '已知且缺失的个人字段不应请求模型，只有未知推荐方式需要匹配');
+    assert.equal(networkRequests.length, 0, '个人资料补充只使用本地规则');
     const panelText = await page.evaluate("document.querySelector('[data-job-applymate-task]').shadowRoot.textContent");
-    assert.equal((await readSession()).counts.missing, 5);
+    assert.equal((await readSession()).counts.missing, 4);
+    assert.equal((await readSession()).counts.todo, 1);
     assert.doesNotMatch(panelText, /本网站|registry/);
 
     const saveFromPanel = async (label, value, stateKey) => {
-      await page.evaluate(`(() => { const root = document.querySelector('[data-job-applymate-task]').shadowRoot; Array.from(root.querySelectorAll('button')).find(button => button.textContent === '展开')?.click(); const target = root.querySelector('[aria-label^=' + ${JSON.stringify(JSON.stringify('补充' + label))} + ']'); if (!target) throw new Error('missing supplement ' + ${JSON.stringify(label)} + ': ' + root.textContent); target.click(); })()`);
-      await page.evaluate(`(() => { const root = document.querySelector('[data-job-applymate-task]').shadowRoot; const answer = root.querySelector('[aria-label="补充个人资料"]'); answer.value = ${JSON.stringify(value)}; answer.dispatchEvent(new Event(answer.tagName === 'SELECT' ? 'change' : 'input')); Array.from(root.querySelectorAll('button')).find(button => button.textContent === '保存并填入').click(); })()`);
+      await page.evaluate(`(() => { const root = document.querySelector('[data-job-applymate-task]').shadowRoot; Array.from(root.querySelectorAll('button')).find(button => button.textContent === '展开')?.click(); const target = root.querySelector('[aria-label^=' + ${JSON.stringify(JSON.stringify('补充' + label))} + ']') || Array.from(root.querySelectorAll('.item-row')).find(row => row.textContent.includes(${JSON.stringify(label)}))?.querySelector('button'); if (!target) throw new Error('missing supplement ' + ${JSON.stringify(label)} + ': ' + root.textContent); target.click(); })()`);
+      await page.evaluate(`(() => { const root = document.querySelector('[data-job-applymate-task]').shadowRoot; Array.from(root.querySelectorAll('button')).find(button => button.textContent === '两处都用')?.click(); const answer = root.querySelector('[aria-label="补充个人资料"]'); answer.value = ${JSON.stringify(value)}; answer.dispatchEvent(new Event(answer.tagName === 'SELECT' ? 'change' : 'input')); const save = Array.from(root.querySelectorAll('button')).find(button => button.textContent === '保存并填入'); if (!save) throw new Error('missing save action: ' + root.textContent); save.click(); })()`);
       await waitFor(() => page.evaluate(`window.formFixture.snapshot().state[${JSON.stringify(stateKey)}] === ${JSON.stringify(value)}`), '保存并填写 ' + label).catch(async error => { console.error(JSON.stringify(await page.evaluate("({ panel: document.querySelector('[data-job-applymate-task]').shadowRoot.textContent, state: window.formFixture.snapshot(), radios: Array.from(document.querySelectorAll('input[type=radio]')).map(input => ({ id: input.id, checked: input.checked, value: input.value })) })"))); console.error(JSON.stringify(await background.evaluate("chrome.storage.local.get('userProfile')"))); throw error; });
       await waitForSession();
       await page.evaluate("Array.from(document.querySelector('[data-job-applymate-task]').shadowRoot.querySelectorAll('button')).find(button => button.textContent === '← 返回列表').click()");
@@ -459,9 +410,9 @@ try {
     await page.send('Page.navigate', { url: secondOrigin + '?scenario=personal-extra' });
     await waitFor(() => page.evaluate('Boolean(window.formFixture)'), '第二个网站加载');
     await waitFor(() => background.evaluate(`(async () => { const tab = (await chrome.tabs.query({ url: ${JSON.stringify(secondOrigin + '*')} }))[0]; return tab?.id && (await chrome.tabs.sendMessage(tab.id, { type: 'PING_CONTENT' }, { frameId: 0 }))?.success; })()`), '第二个网站连接');
-    modelRequests = []; await start(secondOrigin);
+    await start(secondOrigin);
     await waitForSession(secondOrigin);
-    assert.equal(modelRequests.length, 0);
+    assert.equal(networkRequests.length, 0);
     assert.equal(await page.evaluate("document.querySelector('#age').value"), '26');
     assert.equal(await page.evaluate("window.formFixture.snapshot().state.referral"), '内推');
     assert.equal(await page.evaluate("document.querySelector('#languageSkills').value"), '');
@@ -477,6 +428,7 @@ try {
     const concurrent = await background.evaluate("chrome.storage.local.get('userProfile').then(result => result.userProfile.personal)");
     assert.equal(concurrent.preferredCities, '上海'); assert.equal(concurrent.languageSkills, '英语 CET-6');
   });
+  assert.equal(networkRequests.length, 0, 'DOM 和规则填写不能请求模型服务');
   const exceptions = page.events.filter(event => event.method === 'Runtime.exceptionThrown');
   assert.equal(exceptions.length, 0, JSON.stringify(exceptions));
   console.log(`\n浏览器回归完成：${passed} 通过，${failed.length} 失败。仅使用本地测试页面，未投递申请。`);
