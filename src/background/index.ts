@@ -318,7 +318,7 @@ async function handleParseResume(
 
 function backupFilename(date = new Date()): string {
   const compact = date.toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
-  return `job-applymate-backup-${compact}.json`;
+  return `fill-ease-backup-${compact}.json`;
 }
 
 async function handleExportBackup(): Promise<MessageResponse> {

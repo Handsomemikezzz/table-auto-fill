@@ -1,14 +1,14 @@
-# Job ApplyMate
+# FillEase
 
 <p align="center">
-  <img src="public/icons/job-applymate-master.png" width="160" alt="Job ApplyMate mascot holding an OFFER sign">
+  <img src="public/icons/fill-ease-master.png" width="160" alt="FillEase resume sheet and checkmark icon">
 </p>
 
 <p align="center">
   <a href="README.md">中文</a> · <strong>English</strong>
 </p>
 
-Job ApplyMate is a Chrome and Edge extension that keeps job-application information in one place and fills online application forms with your personal profile, education, work experience, projects, and resume.
+FillEase is a Chrome and Edge extension that keeps job-application information in one place and fills online application forms with your personal profile, education, work experience, projects, and resume.
 
 ## Highlights
 
@@ -28,13 +28,13 @@ Job ApplyMate is a Chrome and Edge extension that keeps job-application informat
 
 ### Install a release build
 
-1. Open the repository's **Releases** page, or download [`release/job-applymate-extension.zip`](release/job-applymate-extension.zip) directly from the repository.
-2. Download `job-applymate-extension.zip` from the latest release when one is available.
+1. Open the repository's **Releases** page, or download [`release/fill-ease-extension.zip`](release/fill-ease-extension.zip) directly from the repository.
+2. Download `fill-ease-extension.zip` from the latest release when one is available.
 3. Extract the ZIP file. Browsers cannot load the ZIP directly.
 4. Open `chrome://extensions` in Chrome or `edge://extensions` in Edge.
 5. Enable **Developer mode**.
 6. Click **Load unpacked** and select the extracted folder.
-7. Pin **Job ApplyMate** to the browser toolbar.
+7. Pin **FillEase** to the browser toolbar.
 
 ### Build from source
 
@@ -126,6 +126,6 @@ npm run package:extension # Build the release ZIP
 - Manual backups are plain JSON and may contain sensitive profile data.
 - Export a backup before uninstalling the extension or clearing extension data.
 
-## License
+## Open-source attribution and license
 
-MIT License
+FillEase is a derivative of the open-source Job ApplyMate project, with its own name and icon. The original copyright notice and MIT license are preserved in [LICENSE](LICENSE) and included in the extension build.

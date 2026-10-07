@@ -454,7 +454,7 @@ function App() {
               alt=""
             />
             <div>
-              <span className="options-brand-name">JOB APPLYMATE</span>
+              <span className="options-brand-name">FILLEASE · 填简</span>
               <h1>填写你的申请资料</h1>
               <p>像填写简历一样，一页整理基本信息与经历，保存后用于网申填写。</p>
             </div>

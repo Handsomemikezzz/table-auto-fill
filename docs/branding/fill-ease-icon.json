@@ -1,0 +1,14 @@
+{
+  "name": "填简",
+  "englishName": "FillEase",
+  "generationTool": "built-in image_gen",
+  "transparentBackground": true,
+  "master": "public/icons/fill-ease-master.png",
+  "sizes": [
+    16,
+    32,
+    48,
+    128
+  ],
+  "prompt": "Use case: logo-brand. Asset type: production browser-extension app icon for 填简 (FillEase), a local resume-profile and job-application form-filling tool. Create ONE polished square icon, no presentation board or mockup. Subject: a bold warm-white résumé paper sheet with a folded upper-right corner and one large, confident deep-teal checkmark integrated into the paper, symbolizing easy form completion. Backdrop: a solid deep-teal rounded-square tile with a very subtle mint accent, truly transparent outside the rounded tile. Style: clean flat vector-like graphic, professional and friendly, precise simple geometric silhouette, thick rounded strokes, high contrast, optimized to remain recognizable at 16 and 32 pixels. Composition: centered and symmetrical within a 1024x1024 square, the rounded tile nearly fills the canvas with only a small even transparent margin, the paper and checkmark occupy most of the tile. Color palette: deep teal #0F766E, warm white #FAFFFC, restrained mint #5CE2BE. No words, no Chinese characters, no letters, no tiny text lines, no mascot, no OFFER sign, no briefcase, no sparkles, no watermark, no surrounding shadow, no texture, no photographic effects, no checkerboard pattern."
+}

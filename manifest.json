@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "Job ApplyMate",
+  "name": "填简 FillEase",
   "version": "1.3.1",
   "minimum_chrome_version": "116",
-  "description": "你的求职申请搭档：识别并填写网申表单、管理简历资料和规则填写",
+  "description": "本地管理简历资料，通过 DOM 识别和规则填写网申表单",
   "permissions": [
     "storage",
     "unlimitedStorage",

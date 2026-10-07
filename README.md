@@ -1,14 +1,14 @@
-# Job ApplyMate
+# 填简（FillEase）
 
 <p align="center">
-  <img src="public/icons/job-applymate-master.png" width="160" alt="Job ApplyMate mascot holding an OFFER sign">
+  <img src="public/icons/fill-ease-master.png" width="160" alt="填简（FillEase） resume sheet and checkmark icon">
 </p>
 
 <p align="center">
   <strong>中文</strong> · <a href="README_EN.md">English</a>
 </p>
 
-Job ApplyMate 是一款适用于 Chrome 和 Edge 的求职申请搭档，用于集中管理求职资料、识别招聘表单并快速填入个人信息、教育经历、实习项目和简历文件。
+填简（FillEase） 是一款适用于 Chrome 和 Edge 的求职申请搭档，用于集中管理求职资料、识别招聘表单并快速填入个人信息、教育经历、实习项目和简历文件。
 
 ## 功能说明
 
@@ -31,13 +31,13 @@ Job ApplyMate 是一款适用于 Chrome 和 Edge 的求职申请搭档，用于�
 
 如果你只是想使用插件：
 
-1. 点击当前仓库右侧的 Releases 页面下载最新版，或直接下载仓库中的 [`release/job-applymate-extension.zip`](release/job-applymate-extension.zip)。
+1. 点击当前仓库右侧的 Releases 页面下载最新版，或直接下载仓库中的 [`release/fill-ease-extension.zip`](release/fill-ease-extension.zip)。
 2. 先将压缩包解压到本地任意文件夹。
 3. 打开 Chrome 或 Edge 的扩展程序管理界面。
 4. 开启页面内的“开发者模式”。
 5. 点击“加载解压缩的扩展”。
 6. 选择刚才解压出来的扩展目录。
-7. 将“Job ApplyMate”固定到浏览器工具栏，方便使用。
+7. 将“填简（FillEase）”固定到浏览器工具栏，方便使用。
 
 浏览器不能直接加载 `.zip` 压缩包，必须先解压，再加载解压后的目录。
 
@@ -165,9 +165,9 @@ npm run dev
 - 手动备份文件为明文 JSON，可能包含个人信息和简历。
 - 卸载扩展或清除扩展数据前，建议先导出完整备份。
 
-## 许可证
+## 开源来源与许可证
 
-MIT License
+填简（FillEase）基于 Job ApplyMate 开源项目进行二次开发，使用独立的产品名称与图标。原项目版权声明与 MIT 许可完整保留在 [LICENSE](LICENSE) 中，并随扩展构建产物分发。
 
 ### 从简历自动准备资料
 

@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-echo "== Job-Application-Helper 一键发布 Release =="
+echo "== FillEase 一键发布 Release =="
 echo "目录: $(pwd)"
 echo
 

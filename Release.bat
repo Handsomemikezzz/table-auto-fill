@@ -9,7 +9,7 @@ set "original_cp=%original_cp: =%"
 chcp 65001 >nul
 
 cd /d "%~dp0"
-echo == Job-Application-Helper 一键发布 Release ==
+echo == FillEase 一键发布 Release ==
 echo 目录: %cd%
 echo.
 

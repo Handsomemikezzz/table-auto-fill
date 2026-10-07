@@ -100,9 +100,9 @@ export function createInfoOverlayController(options: {
       host.style.setProperty(property.replace(/[A-Z]/g, match => `-${match.toLowerCase()}`), value, 'important');
     }
     shadow = host.attachShadow({ mode: 'open' });
-    shadow.innerHTML = `<style>${OVERLAY_CSS}</style><main class="panel" aria-label="Job ApplyMate 信息浮窗">
+    shadow.innerHTML = `<style>${OVERLAY_CSS}</style><main class="panel" aria-label="填简 信息浮窗">
       <header class="header" data-drag-handle>
-        <div class="brand"><span class="brand-mark">✓</span><span><strong>Job ApplyMate</strong><small data-resume-label>默认资料</small></span></div>
+        <div class="brand"><img class="brand-mark" src="${chrome.runtime.getURL('icons/icon32.png')}" alt="" /><span><strong>填简</strong><small data-resume-label>默认资料</small></span></div>
         <div class="header-actions">
           <button class="icon-button" type="button" data-settings title="设置个人资料">设置</button>
           <button class="icon-button close-button" type="button" data-close title="关闭">×</button>

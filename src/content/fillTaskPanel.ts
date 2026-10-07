@@ -111,6 +111,8 @@ export function createFillTaskPanel(
       font-weight: 500;
       margin-bottom: 2px;
     }
+    .brand-title { display: flex; align-items: center; gap: 7px; }
+    .brand-title img { width: 22px; height: 22px; }
     .brand-status {
       font-size: 12px;
       color: #94a3b8;
@@ -569,7 +571,12 @@ export function createFillTaskPanel(
     if (session && counts && session.phase === 'complete' && previousPhase !== 'complete' && counts.todo === 0 && !session.error) expanded = false;
     if (session) previousPhase = session.phase;
     const brandRow = el('div', undefined, 'brand-row');
-    brandRow.append(el('span', 'Job ApplyMate'));
+    const brandTitle = el('div', undefined, 'brand-title');
+    const brandIcon = el('img');
+    brandIcon.src = chrome.runtime.getURL('icons/icon32.png');
+    brandIcon.alt = '';
+    brandTitle.append(brandIcon, el('span', '填简'));
+    brandRow.append(brandTitle);
     const brandRight = el('div', undefined, 'brand-status');
     if (!session || session.busy || session.phase === 'understanding') {
       const stopBtn = el('button', '停止', 'btn-text');

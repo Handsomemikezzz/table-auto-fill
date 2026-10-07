@@ -32,7 +32,10 @@ export default function App() {
   };
   const fill = (region = false) => send({ type: 'START_FILL_SESSION', payload: { sourceId, attachmentId: attachmentId === 'none' ? null : attachmentId, region } });
   return <div className="popup-shell">
-    <header className="popup-header"><div><h1>Job ApplyMate</h1><p>你的求职申请搭档</p></div></header>
+    <header className="popup-header">
+      <img className="popup-brand-mark" src={typeof chrome !== 'undefined' && chrome.runtime?.getURL ? chrome.runtime.getURL('icons/icon48.png') : '/icons/icon48.png'} alt="" />
+      <div><h1>填简</h1><p>FillEase · 让网申填写更简单</p></div>
+    </header>
     <div className="popup-content">
       {loading && <p>加载资料中…</p>}
       {!loading && !profile && <p>请先打开设置，导入简历或填写个人资料。</p>}

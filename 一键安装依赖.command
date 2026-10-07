@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-echo "== Job-Application-Helper 一键安装 & 构建 =="
+echo "== FillEase 一键安装 & 构建 =="
 echo "目录: $(pwd)"
 echo
 

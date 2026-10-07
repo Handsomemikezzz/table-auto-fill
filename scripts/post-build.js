@@ -24,6 +24,8 @@ try {
   const manifestDest = join(distDir, 'manifest.json');
   copyFileSync(manifestSrc, manifestDest);
   console.log('✓ manifest.json copied to dist/');
+  copyFileSync(join(projectRoot, 'LICENSE'), join(distDir, 'LICENSE'));
+  console.log('✓ original license copied to dist/');
 
   // 复制 icons
   const iconsSrcDir = join(projectRoot, 'public', 'icons');
