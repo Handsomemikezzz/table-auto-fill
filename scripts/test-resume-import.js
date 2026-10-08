@@ -58,6 +58,8 @@ try {
   await waitFor(() => page.evaluate("Boolean(document.querySelector('#personal-name'))"), '资料页');
   await page.evaluate(`chrome.storage.local.set({ userProfile: { personal: { name: '', phone: '', email: '', birthDate: '', gender: '' }, education: [], experience: [], projects: [], skills: [], certifications: [], customInformation: [] }, llmConfig: { provider: 'custom', model: 'retired', apiKey: 'retired-key', baseUrl: '${origin}/v1' } })`);
   await upload(png); await waitReview();
+  assert.equal(await page.evaluate("getComputedStyle(document.querySelector('.resume-review-header h2')).fontSize"), '24px', '桌面核对页样式应在小屏媒体查询之外生效');
+  assert.equal(await page.evaluate("getComputedStyle(document.querySelector('.resume-review-card')).borderTopWidth"), '1px');
   assert.equal(await page.evaluate("document.querySelector('[aria-label=邮箱]').value"), 'alex@example.com');
   assert.equal((await stored()).personal.email, ''); assert.equal((await stored()).resumes.length,1);
   assert.equal(externalRequests.length,0);
@@ -95,6 +97,16 @@ try {
   assert.equal(externalRequests.length,0);
   assert.equal(page.events.filter(event => event.method === 'Runtime.exceptionThrown').length,0);
   console.log('✓ 本地规则恢复混合章节的论文；所有简历导入均无模型请求');
+  await waitFor(() => page.evaluate("!document.querySelector('[role=dialog]') && document.querySelectorAll('.supplemental-record').length >= 3"), '预填写后的补充资料');
+  assert.equal(await page.evaluate("getComputedStyle(document.querySelector('.supplemental-group')).borderTopWidth"), '1px', '桌面补充资料必须有分组卡片样式');
+  assert.equal(await page.evaluate("getComputedStyle(document.querySelector('.supplemental-record-heading strong')).fontSize"), '14px');
+  await page.evaluate("document.querySelector('.supplemental-record').open = true");
+  assert.equal(await page.evaluate("getComputedStyle(document.querySelector('.supplemental-fields')).gridTemplateColumns.split(' ').length"), 2);
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 375, height: 812, deviceScaleFactor: 1, mobile: false });
+  assert.equal(await page.evaluate("getComputedStyle(document.querySelector('.supplemental-fields')).gridTemplateColumns.split(' ').length"), 1);
+  assert(await page.evaluate("document.querySelector('#profile-more').scrollWidth <= document.querySelector('#profile-more').clientWidth"));
+  await page.send('Emulation.clearDeviceMetricsOverride');
+  console.log('✓ 预填写后补充资料保持卡片样式，桌面双列表单、小屏单列且无溢出');
 } finally {
   page?.close(); if (browser) await browser.close();
   await new Promise(resolve => server.close(resolve)); rmSync(temp, { recursive:true, force:true });

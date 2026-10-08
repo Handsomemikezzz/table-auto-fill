@@ -142,7 +142,10 @@ npm test
 npm run build
 npm run lint
 npm run dev
+npm run benchmark:check
 ```
+
+社招效果回归使用 [benchmark](tests/benchmark/README.md)：三个真实表单的局部结构复现，加一个合成长表单，共 16 次实际扩展运行。`npm run benchmark:check` 构建扩展并与冻结基准逐字段比较，PR 中也会运行。当前标注待人工审核，结果用于固定样本回归，不代表线上网站成功率；首版结果见 [baseline 报告](tests/benchmark/baselines/2026-10-08-v1.md)。
 
 - `npm test`：运行全部自动化测试。
 - `npm run build`：类型检查并生成 `dist/`。

@@ -1280,8 +1280,9 @@ html { scroll-behavior: smooth; }
   .custom-information-fields {
     grid-template-columns: 1fr;
   }
+}
 
-  @media (prefers-reduced-motion: reduce) {
+@media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .profile-directory a { transition: none; }
   button {
@@ -1332,11 +1333,7 @@ html { scroll-behavior: smooth; }
 .resume-review-record summary span { overflow-wrap: anywhere; }
 .resume-review-record > summary::after { content: '展开'; color: var(--color-muted); font-size: 12px; font-weight: 400; }
 .resume-review-record[open] > summary::after { content: '收起'; }
-.supplemental-profile { max-width: 100%; }
-.supplemental-profile > h2 { font-size: 20px; margin: 0 0 12px; }
-.supplemental-profile .btn-secondary { min-height: 40px; margin-top: 12px; }
-.supplemental-profile .supplemental-remove { color: #b91c1c; min-height: 36px; }
-.supplemental-profile summary:focus-visible, .resume-review-card summary:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 4px; border-radius: 4px; }
+.resume-review-card summary:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 4px; border-radius: 4px; }
 .resume-review-empty { color: var(--color-muted); font-size: 13px; margin: 0; }
 .resume-review-source { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow-y: auto; line-height: 1.7; font: inherit; font-size: 12px; }
 .resume-review-publication-candidates { margin-top: 14px; padding: 12px; border-radius: 8px; background: #eff6ff; font-size: 13px; line-height: 1.6; }
@@ -1360,3 +1357,147 @@ html { scroll-behavior: smooth; }
 .resume-review-header > div { min-width: 0; }
 .resume-review-header p { overflow-wrap: anywhere; }
 .resume-review-warning button { display: block; margin-top: 10px; padding: 8px 12px; border: 1px solid #facc15; border-radius: 8px; background: white; color: #854d0e; }
+
+/* Supplemental records use the same surfaces and controls as the profile form. */
+.supplemental-description {
+  margin: 0 0 24px;
+  color: var(--color-muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.supplemental-groups,
+.supplemental-records { display: grid; gap: 12px; }
+
+.supplemental-group {
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-panel);
+}
+
+.supplemental-group-summary,
+.supplemental-record-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 16px;
+  border-radius: 12px;
+  cursor: pointer;
+  list-style: none;
+  transition: background-color 160ms ease;
+}
+
+.supplemental-group-summary::-webkit-details-marker,
+.supplemental-record-summary::-webkit-details-marker { display: none; }
+.supplemental-group-summary::marker,
+.supplemental-record-summary::marker { content: ''; }
+.supplemental-group-summary:hover { background: var(--color-bg); }
+.supplemental-record-summary:hover { background: var(--color-primary-soft); }
+.supplemental-profile summary:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; }
+
+.supplemental-group-title {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-text);
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.supplemental-count {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: var(--color-bg);
+  color: var(--color-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+}
+.supplemental-count.has-records { color: var(--color-primary); background: var(--color-primary-soft); }
+
+.supplemental-chevron {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin: 0 4px;
+  border-right: 1.5px solid var(--color-muted);
+  border-bottom: 1.5px solid var(--color-muted);
+  transform: rotate(-45deg);
+  transition: transform 160ms ease;
+}
+.supplemental-group[open] > summary > .supplemental-chevron,
+.supplemental-record[open] > summary > .supplemental-chevron { transform: rotate(45deg); }
+.supplemental-group[open] > summary { border-bottom: 1px solid var(--color-border); border-radius: 12px 12px 0 0; }
+.supplemental-group-content { padding: 16px; }
+
+.supplemental-empty {
+  padding: 20px 16px;
+  margin: 0;
+  border: 1px dashed var(--color-border-hover);
+  border-radius: var(--radius-control);
+  background: var(--color-bg);
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.supplemental-record {
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-bg);
+}
+.supplemental-record-index { align-self: flex-start; color: var(--color-primary); font-size: 12px; font-weight: 650; line-height: 22px; font-variant-numeric: tabular-nums; }
+.supplemental-record-heading { display: grid; flex: 1; min-width: 0; gap: 4px; }
+.supplemental-record-heading strong { color: var(--color-text-secondary); font-size: 14px; font-weight: 600; line-height: 1.6; overflow-wrap: anywhere; }
+.supplemental-record-meta { color: var(--color-muted); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.supplemental-record-content { padding: 0 16px 16px; }
+.supplemental-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 16px; padding-top: 16px; border-top: 1px solid var(--color-border); }
+.supplemental-field { display: grid; align-content: start; min-width: 0; gap: 7px; }
+.supplemental-field-wide { grid-column: 1 / -1; }
+.supplemental-field > span { color: var(--color-text-secondary); font-size: 13px; font-weight: 500; line-height: 1.5; }
+.supplemental-field input,
+.supplemental-field textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 9px 12px;
+  border: 1px solid var(--color-border-hover);
+  border-radius: var(--radius-control);
+  background: var(--color-panel);
+  color: var(--color-text);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.supplemental-field textarea { min-height: 104px; resize: vertical; }
+.supplemental-record-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
+.supplemental-remove {
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-panel);
+  color: #b91c1c;
+  font-size: 12px;
+  cursor: pointer;
+}
+.supplemental-remove:hover { border-color: currentColor; background: var(--color-danger-soft); }
+.supplemental-add { display: inline-flex; align-items: center; justify-content: center; gap: 8px; margin-top: 16px; color: var(--color-primary); }
+
+@media (max-width: 640px) {
+  .supplemental-fields { grid-template-columns: minmax(0, 1fr); }
+  .supplemental-group-summary,
+  .supplemental-record-summary { padding: 14px 12px; gap: 10px; }
+  .supplemental-group-content { padding: 12px; }
+  .supplemental-record-content { padding: 0 12px 12px; }
+  .supplemental-add { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .supplemental-profile summary,
+  .supplemental-chevron { transition: none; }
+}

@@ -1,0 +1,119 @@
+{
+  "id": "avepoint-native",
+  "title": "AvePoint · 原生表单",
+  "renderer": "native",
+  "provenance": "live-structure-reproduction",
+  "entryUrl": "https://www.avepoint.com.cn/cn-recruitment/form/198",
+  "sections": [
+    {
+      "title": "个人简历",
+      "records": [
+        {
+          "title": "",
+          "fields": [
+            {
+              "id": "control-026",
+              "label": "姓名",
+              "kind": "text",
+              "name": "name",
+              "existing": "原有候选人"
+            },
+            {
+              "id": "control-027",
+              "label": "年龄",
+              "kind": "text",
+              "name": "age"
+            },
+            {
+              "id": "control-028",
+              "label": "性别",
+              "kind": "radio",
+              "name": "gender",
+              "options": [
+                "男",
+                "女"
+              ],
+              "optionValues": [
+                "man",
+                "woman"
+              ],
+              "unwrappedRadio": true
+            },
+            {
+              "id": "control-029",
+              "label": "应聘地点",
+              "kind": "radio",
+              "name": "location",
+              "options": [
+                "长春"
+              ],
+              "optionValues": [
+                "changchun"
+              ],
+              "unwrappedRadio": true
+            },
+            {
+              "id": "control-030",
+              "label": "应聘岗位",
+              "kind": "text",
+              "name": "job",
+              "readonly": true,
+              "initial": "网络安全工程师--IT方向"
+            },
+            {
+              "id": "control-031",
+              "label": "学历",
+              "kind": "select",
+              "name": "education",
+              "options": [
+                "博士",
+                "硕士",
+                "本科",
+                "大专"
+              ],
+              "optionValues": [
+                "d",
+                "m",
+                "b",
+                "c"
+              ]
+            },
+            {
+              "id": "control-032",
+              "label": "毕业院校",
+              "kind": "text",
+              "name": "school"
+            },
+            {
+              "id": "control-033",
+              "label": "专业",
+              "kind": "text",
+              "name": "speciality"
+            },
+            {
+              "id": "control-034",
+              "label": "手机号码",
+              "kind": "text",
+              "name": "tel",
+              "inputType": "tel"
+            },
+            {
+              "id": "control-035",
+              "label": "电子邮箱",
+              "kind": "text",
+              "name": "email",
+              "inputType": "email",
+              "existing": "existing@example.com"
+            },
+            {
+              "id": "control-036",
+              "label": "上传简历",
+              "kind": "file",
+              "name": "file"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

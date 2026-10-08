@@ -31,3 +31,6 @@ EXTENSION_DESIGN.md
 
 # Local visual QA screenshots
 qa-*.png
+
+# Regenerable benchmark run reports (versioned baselines live in tests/benchmark)
+artifacts/benchmark/

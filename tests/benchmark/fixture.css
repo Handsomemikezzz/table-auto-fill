@@ -1,0 +1,15 @@
+body { font: 15px system-ui, sans-serif; color: #203532; background: #f2f5f4; margin: 0; }
+main { max-width: 920px; margin: 28px auto; background: white; padding: 32px; }
+h1 { font-size: 24px; } h2 { font-size: 18px; margin: 28px 0 16px; }
+fieldset { border: 1px solid #ddd; margin: 16px 0; padding: 16px; }
+.field, .ud-formily-item, .apply-field-Q2iJ7AtQGX { margin: 15px 0; }
+label { display: inline-block; margin-bottom: 6px; }
+input:not([type=checkbox]):not([type=radio]):not([type=file]), select { width: 270px; padding: 8px; border: 1px solid #b8c6c2; font: inherit; }
+.sd-Dropdown-container-1CigZ, .ud__select { position: relative; width: 300px; }
+.ud__select__selector { min-height: 35px; display: flex; align-items: center; border: 1px solid #b8c6c2; }
+.ud__select__selector input { width: 5px !important; border: 0 !important; }
+.ud__select__selector__selectItem { padding: 8px; }
+.sd-Menu-content-container, .ud__select__dropdown { border: 1px solid #ccc; background: white; min-width: 280px; }
+.sd-Menu-content-item-3BOO1, .ud__select__list__item { padding: 8px; cursor: pointer; }
+.throne-biz-date-range-picker-wrapper, .split-date { display: flex; align-items: center; gap: 10px; }
+button { padding: 10px 18px; margin-top: 15px; }

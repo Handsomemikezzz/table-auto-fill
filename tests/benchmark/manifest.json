@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "benchmarkVersion": "2026-10-08-v1",
+  "referenceDate": "2026-10-08",
+  "split": "development-regression",
+  "sources": [
+    "moka-deepseek",
+    "bytedance-social",
+    "avepoint-native",
+    "social-long-mock"
+  ],
+  "profiles": [
+    "complete",
+    "limited"
+  ],
+  "states": [
+    "empty",
+    "existing"
+  ],
+  "captureDate": "2026-10-08",
+  "pendingSources": [
+    {
+      "id": "beisen-dreame",
+      "entryUrl": "https://dreame.zhiye.com/",
+      "status": "configuration-fetch-failed-blank-page",
+      "capturedFields": 0
+    }
+  ],
+  "limitations": [
+    "三份页面结构由浏览器只读检查后手工复现，不包含厂商运行时；不能当作线上填写成功率。",
+    "字节工作经历折叠状态保持原状；两段工作经历在合成长表单覆盖。",
+    "城市选项是所见选项的简化，级联/搜索交互未完整复刻。",
+    "没有登录凭据、真实个人资料、附件、协议接受或投递；上传和声明只检查保持原状。",
+    "全部为开发回归集，没有未经开发使用的留出集；gold 为代理标注，待用户审核。"
+  ]
+}

@@ -1,0 +1,247 @@
+{
+  "id": "social-long-mock",
+  "title": "社招长表单 · 合成压力样本",
+  "renderer": "native",
+  "provenance": "synthetic-behavioral-mock",
+  "entryUrl": null,
+  "sections": [
+    {
+      "title": "个人信息",
+      "records": [
+        {
+          "title": "",
+          "fields": [
+            {
+              "id": "control-037",
+              "label": "姓名",
+              "kind": "text",
+              "existing": "原有候选人"
+            },
+            {
+              "id": "control-038",
+              "label": "手机号码",
+              "kind": "text"
+            },
+            {
+              "id": "control-039",
+              "label": "邮箱",
+              "kind": "text",
+              "existing": "existing@example.com"
+            },
+            {
+              "id": "control-040",
+              "label": "期望职位",
+              "kind": "text"
+            },
+            {
+              "id": "control-041",
+              "label": "期望薪资",
+              "kind": "text"
+            },
+            {
+              "id": "control-042",
+              "label": "到岗时间",
+              "kind": "text"
+            },
+            {
+              "id": "control-043",
+              "label": "当前薪资",
+              "kind": "text"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "教育经历",
+      "records": [
+        {
+          "title": "教育经历 1",
+          "fields": [
+            {
+              "id": "control-044",
+              "label": "学校名称",
+              "kind": "text"
+            },
+            {
+              "id": "control-045",
+              "label": "学历",
+              "kind": "text"
+            },
+            {
+              "id": "control-046",
+              "label": "专业",
+              "kind": "text"
+            },
+            {
+              "id": "control-047",
+              "label": "入学时间",
+              "kind": "month"
+            },
+            {
+              "id": "control-048",
+              "label": "毕业时间",
+              "kind": "month"
+            }
+          ]
+        },
+        {
+          "title": "教育经历 2",
+          "fields": [
+            {
+              "id": "control-049",
+              "label": "学校名称",
+              "kind": "text"
+            },
+            {
+              "id": "control-050",
+              "label": "学历",
+              "kind": "text"
+            },
+            {
+              "id": "control-051",
+              "label": "专业",
+              "kind": "text"
+            },
+            {
+              "id": "control-052",
+              "label": "入学时间",
+              "kind": "month"
+            },
+            {
+              "id": "control-053",
+              "label": "毕业时间",
+              "kind": "month"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "工作经历",
+      "records": [
+        {
+          "title": "工作经历 1",
+          "fields": [
+            {
+              "id": "control-054",
+              "label": "公司名称",
+              "kind": "text"
+            },
+            {
+              "id": "control-055",
+              "label": "职位名称",
+              "kind": "text"
+            },
+            {
+              "id": "control-056",
+              "label": "工作开始时间",
+              "kind": "month"
+            },
+            {
+              "id": "control-057",
+              "label": "工作结束时间",
+              "kind": "month"
+            },
+            {
+              "id": "control-058",
+              "label": "工作描述",
+              "kind": "text"
+            }
+          ]
+        },
+        {
+          "title": "工作经历 2",
+          "fields": [
+            {
+              "id": "control-059",
+              "label": "公司名称",
+              "kind": "text"
+            },
+            {
+              "id": "control-060",
+              "label": "职位名称",
+              "kind": "text"
+            },
+            {
+              "id": "control-061",
+              "label": "工作开始时间",
+              "kind": "month"
+            },
+            {
+              "id": "control-062",
+              "label": "工作结束时间",
+              "kind": "month"
+            },
+            {
+              "id": "control-063",
+              "label": "工作描述",
+              "kind": "text"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "项目经历",
+      "records": [
+        {
+          "title": "项目经历 1",
+          "fields": [
+            {
+              "id": "control-064",
+              "label": "项目名称",
+              "kind": "text"
+            },
+            {
+              "id": "control-065",
+              "label": "项目角色",
+              "kind": "text"
+            },
+            {
+              "id": "control-066",
+              "label": "项目开始时间",
+              "kind": "month"
+            },
+            {
+              "id": "control-067",
+              "label": "项目结束时间",
+              "kind": "month"
+            },
+            {
+              "id": "control-068",
+              "label": "项目描述",
+              "kind": "text"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "控件行为",
+      "records": [
+        {
+          "title": "",
+          "fields": [
+            {
+              "id": "control-069",
+              "label": "性别",
+              "kind": "combo",
+              "options": [
+                "女",
+                "男"
+              ],
+              "delayMs": 180
+            },
+            {
+              "id": "control-070",
+              "label": "联系邮箱",
+              "kind": "text",
+              "rejectWrites": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

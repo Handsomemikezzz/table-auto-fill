@@ -1,0 +1,139 @@
+{
+  "capturedAt": "2026-10-08",
+  "method": "read-only browser DOM inspection through computer-use tools; manually authored local React reproductions",
+  "sources": {
+    "moka-deepseek": {
+      "access": "application form visible without login",
+      "observedLabels": [
+        "意向工作城市",
+        "上传简历",
+        "上传照片",
+        "姓名",
+        "手机号码",
+        "邮箱",
+        "最高学历",
+        "开始工作年月",
+        "个人邮箱",
+        "招聘渠道",
+        "确认声明"
+      ],
+      "observedMarkers": [
+        "apply-field-Q2iJ7AtQGX",
+        "title-IWWQ0Xa4L7",
+        "ctrl-CICMG4Fr4_",
+        "sd-Dropdown-container-1CigZ",
+        "sd-Select-container-1Eq4x",
+        "sd-Input-input-10L0t",
+        "sd-Menu-content-item-3BOO1",
+        "option-label-p2B4XVc4Pn"
+      ],
+      "observedDegreeOptions": [
+        "本科",
+        "硕士",
+        "博士",
+        "高中",
+        "大专",
+        "中专",
+        "初中及以下",
+        "MBA",
+        "其他"
+      ],
+      "observedCityLeaves": [
+        "杭州市",
+        "北京市"
+      ],
+      "simplifications": [
+        "城市级联简化为叶子列表",
+        "工作年份只提供合成子集，渠道选项为合成选项；这些不属于实时采集结果",
+        "未操作声明、上传、预览或提交"
+      ]
+    },
+    "bytedance-social": {
+      "access": "existing authenticated user tab; no additional authentication",
+      "observedModules": [
+        "申请信息",
+        "简历",
+        "基本信息",
+        "工作经历",
+        "教育经历",
+        "实习经历",
+        "项目经历",
+        "作品",
+        "获奖",
+        "语言能力",
+        "自我评价",
+        "社交账号"
+      ],
+      "observedMarkers": [
+        "ud-formily-item",
+        "data-form-field-name",
+        "data-form-field-i18n-name",
+        "ud__native-input",
+        "ud__select",
+        "ud__select__selector__search__input",
+        "throne-biz-date-range-picker-wrapper"
+      ],
+      "observedDegreeOptions": [
+        "博士",
+        "MBA",
+        "硕士",
+        "本科",
+        "大专",
+        "高中",
+        "专职",
+        "初中",
+        "小学"
+      ],
+      "simplifications": [
+        "只复现当前显示的表单状态，不点击添加经历或更改没有工作经历状态",
+        "期望工作地点选项采用合成上海/北京列表，不声称是该页面完整选项",
+        "未保存账户值、简历标识、Cookie、验证码或上传链接"
+      ],
+      "observedDatePrecision": "opened start-date popup, observed 2026年 and 01月 through 12月; no month selected"
+    },
+    "avepoint-native": {
+      "access": "public form without login",
+      "observedNames": [
+        "name",
+        "age",
+        "gender",
+        "location",
+        "job",
+        "education",
+        "school",
+        "speciality",
+        "tel",
+        "email",
+        "file"
+      ],
+      "observedDegreeOptions": [
+        "博士",
+        "硕士",
+        "本科",
+        "大专"
+      ],
+      "observedStructure": "labels point to names but text controls have no corresponding IDs; radio options have sibling text rather than option labels; job is readonly",
+      "simplifications": [
+        "选项提交编码改为本地合成编码，评分先映射回所选标签",
+        "本地上传控件不保留上传地址，提交只计数"
+      ]
+    },
+    "social-long-mock": {
+      "access": "fully synthetic, no vendor attribution",
+      "behaviors": [
+        "两段教育与两段正式工作经历",
+        "一个项目经历",
+        "当前薪资与期望薪资分开",
+        "年精度缺少月份时保持空白",
+        "180ms 异步下拉选项",
+        "业务拒绝写入的备用邮箱"
+      ]
+    },
+    "beisen-dreame": {
+      "access": "blank page; configuration loading failed with TypeError: Failed to fetch",
+      "status": "pending live capture",
+      "capturedFields": 0
+    }
+  },
+  "privacy": "Only form labels, public structural markers, public options and synthetic values are retained. No supplied phone number or authentication data is part of the corpus."
+}

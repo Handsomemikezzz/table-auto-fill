@@ -1,0 +1,38 @@
+name: 社招 benchmark
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+          cache: npm
+      - run: npm ci
+      - run: npm run test:benchmark
+      - name: 安装基准浏览器
+        id: chrome
+        uses: browser-actions/setup-chrome@48483d551c22a1fe6154c6a195ccc6d5773dc8c4
+        with:
+          chrome-version: '143.0.7499.4'
+          install-dependencies: true
+      - name: 检查逐字段倒退
+        env:
+          JOB_APPLYMATE_BROWSER_PATH: ${{ steps.chrome.outputs.chrome-path }}
+        run: npm run benchmark:check
+      - name: 保存本次报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: social-recruitment-benchmark
+          path: artifacts/benchmark/latest.json
+          if-no-files-found: ignore

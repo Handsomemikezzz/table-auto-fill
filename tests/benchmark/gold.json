@@ -1,0 +1,724 @@
+{
+  "annotationStatus": "agent-authored-reviewed-not-human-approved",
+  "author": "Codex",
+  "fields": {
+    "control-001": {
+      "complete": {
+        "policy": "fill",
+        "value": "北京市"
+      },
+      "limited": {
+        "policy": "leave-empty",
+        "value": ""
+      }
+    },
+    "control-002": {
+      "complete": {
+        "policy": "leave-empty",
+        "value": ""
+      },
+      "limited": {
+        "policy": "leave-empty",
+        "value": ""
+      }
+    },
+    "control-003": {
+      "complete": {
+        "policy": "leave-empty",
+        "value": ""
+      },
+      "limited": {
+        "policy": "leave-empty",
+        "value": ""
+      }
+    },
+    "control-004": {
+      "complete": {
+        "policy": "fill",
+        "value": "基准候选人甲"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "基准候选人甲"
+      }
+    },
+    "control-005": {
+      "complete": {
+        "policy": "preserve",
+        "value": "+86"
+      },
+      "limited": {
+        "policy": "preserve",
+        "value": "+86"
+      }
+    },
+    "control-006": {
+      "complete": {
+        "policy": "fill",
+        "value": "13800000000"
+      },
+      "limited": {
+        "policy": "leave-empty",
+        "value": ""
+      }
+    },
+    "control-007": {
+      "complete": {
+        "policy": "fill",
+        "value": "candidate@example.com"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "candidate@example.com"
+      }
+    },
+    "control-008": {
+      "complete": {
+        "policy": "fill",
+        "value": "硕士"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "硕士"
+      }
+    },
+    "control-009": {
+      "complete": {
+        "policy": "leave-empty",
+        "value": ""
+      },
+      "limited": {
+        "policy": "leave-empty",
+        "value": ""
+      }
+    },
+    "control-010": {
+      "complete": {
+        "policy": "fill",
+        "value": "candidate@example.com"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "candidate@example.com"
+      }
+    },
+    "control-011": {
+      "complete": {
+        "policy": "leave-empty",
+        "value": ""
+      },
+      "limited": {
+        "policy": "leave-empty",
+        "value": ""
+      }
+    },
+    "control-012": {
+      "complete": {
+        "policy": "leave-empty",
+        "value": ""
+      },
+      "limited": {
+        "policy": "leave-empty",
+        "value": ""
+      }
+    },
+    "control-013": {
+      "complete": {
+        "policy": "preserve",
+        "value": "上海"
+      },
+      "limited": {
+        "policy": "preserve",
+        "value": "上海"
+      }
+    },
+    "control-014": {
+      "complete": {
+        "policy": "leave-empty",
+        "value": ""
+      },
+      "limited": {
+        "policy": "leave-empty",
+        "value": ""
+      }
+    },
+    "control-015": {
+      "complete": {
+        "policy": "fill",
+        "value": "基准候选人甲"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "基准候选人甲"
+      }
+    },
+    "control-016": {
+      "complete": {
+        "policy": "preserve",
+        "value": "+81"
+      },
+      "limited": {
+        "policy": "preserve",
+        "value": "+81"
+      }
+    },
+    "control-017": {
+      "complete": {
+        "policy": "fill",
+        "value": "13800000000"
+      },
+      "limited": {
+        "policy": "leave-empty",
+        "value": ""
+      }
+    },
+    "control-018": {
+      "complete": {
+        "policy": "fill",
+        "value": "candidate@example.com"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "candidate@example.com"
+      }
+    },
+    "control-019": {
+      "complete": {
+        "policy": "fill",
+        "value": "北京"
+      },
+      "limited": {
+        "policy": "leave-empty",
+        "value": ""
+      }
+    },
+    "control-020": {
+      "complete": {
+        "policy": "preserve",
+        "value": "true"
+      },
+      "limited": {
+        "policy": "preserve",
+        "value": "true"
+      }
+    },
+    "control-021": {
+      "complete": {
+        "policy": "fill",
+        "value": "合成本科大学"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "合成本科大学"
+      }
+    },
+    "control-022": {
+      "complete": {
+        "policy": "fill",
+        "value": "本科"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "本科"
+      }
+    },
+    "control-023": {
+      "complete": {
+        "policy": "fill",
+        "value": "计算机科学"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "计算机科学"
+      }
+    },
+    "control-024": {
+      "complete": {
+        "policy": "fill",
+        "value": [
+          "2013-09",
+          "2017-06"
+        ]
+      },
+      "limited": {
+        "policy": "fill",
+        "value": [
+          "2013-09",
+          ""
+        ]
+      }
+    },
+    "control-025": {
+      "complete": {
+        "policy": "leave-empty",
+        "value": ""
+      },
+      "limited": {
+        "policy": "leave-empty",
+        "value": ""
+      }
+    },
+    "control-026": {
+      "complete": {
+        "policy": "fill",
+        "value": "基准候选人甲"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "基准候选人甲"
+      }
+    },
+    "control-027": {
+      "complete": {
+        "policy": "fill",
+        "value": "31"
+      },
+      "limited": {
+        "policy": "leave-empty",
+        "value": ""
+      }
+    },
+    "control-028": {
+      "complete": {
+        "policy": "fill",
+        "value": "男"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "男"
+      }
+    },
+    "control-029": {
+      "complete": {
+        "policy": "leave-empty",
+        "value": ""
+      },
+      "limited": {
+        "policy": "leave-empty",
+        "value": ""
+      }
+    },
+    "control-030": {
+      "complete": {
+        "policy": "preserve",
+        "value": "网络安全工程师--IT方向"
+      },
+      "limited": {
+        "policy": "preserve",
+        "value": "网络安全工程师--IT方向"
+      }
+    },
+    "control-031": {
+      "complete": {
+        "policy": "fill",
+        "value": "硕士"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "硕士"
+      }
+    },
+    "control-032": {
+      "complete": {
+        "policy": "fill",
+        "value": "合成硕士大学"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "合成硕士大学"
+      }
+    },
+    "control-033": {
+      "complete": {
+        "policy": "fill",
+        "value": "软件工程"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "软件工程"
+      }
+    },
+    "control-034": {
+      "complete": {
+        "policy": "fill",
+        "value": "13800000000"
+      },
+      "limited": {
+        "policy": "leave-empty",
+        "value": ""
+      }
+    },
+    "control-035": {
+      "complete": {
+        "policy": "fill",
+        "value": "candidate@example.com"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "candidate@example.com"
+      }
+    },
+    "control-036": {
+      "complete": {
+        "policy": "leave-empty",
+        "value": ""
+      },
+      "limited": {
+        "policy": "leave-empty",
+        "value": ""
+      }
+    },
+    "control-037": {
+      "complete": {
+        "policy": "fill",
+        "value": "基准候选人甲"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "基准候选人甲"
+      }
+    },
+    "control-038": {
+      "complete": {
+        "policy": "fill",
+        "value": "13800000000"
+      },
+      "limited": {
+        "policy": "leave-empty",
+        "value": ""
+      }
+    },
+    "control-039": {
+      "complete": {
+        "policy": "fill",
+        "value": "candidate@example.com"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "candidate@example.com"
+      }
+    },
+    "control-040": {
+      "complete": {
+        "policy": "fill",
+        "value": "高级研发工程师"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "高级研发工程师"
+      }
+    },
+    "control-041": {
+      "complete": {
+        "policy": "fill",
+        "value": "35K"
+      },
+      "limited": {
+        "policy": "leave-empty",
+        "value": ""
+      }
+    },
+    "control-042": {
+      "complete": {
+        "policy": "fill",
+        "value": "一个月内"
+      },
+      "limited": {
+        "policy": "leave-empty",
+        "value": ""
+      }
+    },
+    "control-043": {
+      "complete": {
+        "policy": "leave-empty",
+        "value": ""
+      },
+      "limited": {
+        "policy": "leave-empty",
+        "value": ""
+      }
+    },
+    "control-044": {
+      "complete": {
+        "policy": "fill",
+        "value": "合成本科大学"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "合成本科大学"
+      }
+    },
+    "control-045": {
+      "complete": {
+        "policy": "fill",
+        "value": "本科"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "本科"
+      }
+    },
+    "control-046": {
+      "complete": {
+        "policy": "fill",
+        "value": "计算机科学"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "计算机科学"
+      }
+    },
+    "control-047": {
+      "complete": {
+        "policy": "fill",
+        "value": "2013-09"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "2013-09"
+      }
+    },
+    "control-048": {
+      "complete": {
+        "policy": "fill",
+        "value": "2017-06"
+      },
+      "limited": {
+        "policy": "leave-empty",
+        "value": ""
+      }
+    },
+    "control-049": {
+      "complete": {
+        "policy": "fill",
+        "value": "合成硕士大学"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "合成硕士大学"
+      }
+    },
+    "control-050": {
+      "complete": {
+        "policy": "fill",
+        "value": "硕士",
+        "acceptedValues": [
+          "硕士研究生"
+        ]
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "硕士",
+        "acceptedValues": [
+          "硕士研究生"
+        ]
+      }
+    },
+    "control-051": {
+      "complete": {
+        "policy": "fill",
+        "value": "软件工程"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "软件工程"
+      }
+    },
+    "control-052": {
+      "complete": {
+        "policy": "fill",
+        "value": "2017-09"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "2017-09"
+      }
+    },
+    "control-053": {
+      "complete": {
+        "policy": "fill",
+        "value": "2020-06"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "2020-06"
+      }
+    },
+    "control-054": {
+      "complete": {
+        "policy": "fill",
+        "value": "合成科技甲"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "合成科技甲"
+      }
+    },
+    "control-055": {
+      "complete": {
+        "policy": "fill",
+        "value": "研发工程师"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "研发工程师"
+      }
+    },
+    "control-056": {
+      "complete": {
+        "policy": "fill",
+        "value": "2020-07"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "2020-07"
+      }
+    },
+    "control-057": {
+      "complete": {
+        "policy": "fill",
+        "value": "2023-06"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "2023-06"
+      }
+    },
+    "control-058": {
+      "complete": {
+        "policy": "fill",
+        "value": "开发合成数据平台"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "开发合成数据平台"
+      }
+    },
+    "control-059": {
+      "complete": {
+        "policy": "fill",
+        "value": "合成科技乙"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "合成科技乙"
+      }
+    },
+    "control-060": {
+      "complete": {
+        "policy": "fill",
+        "value": "资深研发工程师"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "资深研发工程师"
+      }
+    },
+    "control-061": {
+      "complete": {
+        "policy": "fill",
+        "value": "2023-07"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "2023-07"
+      }
+    },
+    "control-062": {
+      "complete": {
+        "policy": "fill",
+        "value": "2026-09"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "2026-09"
+      }
+    },
+    "control-063": {
+      "complete": {
+        "policy": "fill",
+        "value": "维护合成服务系统"
+      },
+      "limited": {
+        "policy": "leave-empty",
+        "value": ""
+      }
+    },
+    "control-064": {
+      "complete": {
+        "policy": "fill",
+        "value": "合成检索项目"
+      },
+      "limited": {
+        "policy": "leave-empty",
+        "value": ""
+      }
+    },
+    "control-065": {
+      "complete": {
+        "policy": "fill",
+        "value": "负责人"
+      },
+      "limited": {
+        "policy": "leave-empty",
+        "value": ""
+      }
+    },
+    "control-066": {
+      "complete": {
+        "policy": "fill",
+        "value": "2024-02"
+      },
+      "limited": {
+        "policy": "leave-empty",
+        "value": ""
+      }
+    },
+    "control-067": {
+      "complete": {
+        "policy": "fill",
+        "value": "2025-08"
+      },
+      "limited": {
+        "policy": "leave-empty",
+        "value": ""
+      }
+    },
+    "control-068": {
+      "complete": {
+        "policy": "fill",
+        "value": "实现合成检索服务"
+      },
+      "limited": {
+        "policy": "leave-empty",
+        "value": ""
+      }
+    },
+    "control-069": {
+      "complete": {
+        "policy": "fill",
+        "value": "男"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "男"
+      }
+    },
+    "control-070": {
+      "complete": {
+        "policy": "fill",
+        "value": "candidate@example.com"
+      },
+      "limited": {
+        "policy": "fill",
+        "value": "candidate@example.com"
+      }
+    }
+  },
+  "annotationDecisions": {
+    "workRecordOrder": "合成长表单按资料列表顺序，即最早到最近；两个序号不是厂商网站的顺序约定。",
+    "nativeEducationSummary": "AvePoint 的唯一学历、毕业院校、专业组按最高学历记录标注；页面未明确最高，这是一项待用户审核的产品政策假设。",
+    "monthPrecision": "字节教育日期弹层实际显示01月至12月；只有年份的资料应留空，复现保留可编辑文本，不包含厂商日期弹层运行时。",
+    "degreeEquivalence": "开放文本中的硕士与硕士研究生视为等价；封闭选项须真正选择对应项。"
+  }
+}
