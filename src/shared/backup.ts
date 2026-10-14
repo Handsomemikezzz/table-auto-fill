@@ -103,7 +103,7 @@ function validateUserProfile(value: unknown): value is UserProfile {
   if (value.resume !== undefined) {
     if (!isPlainObject(value.resume)) return false;
     if (!hasOnlyStringFields(value.resume, [
-      'fileName', 'fileData', 'fileType', 'parsedText', 'uploadDate',
+      'fileName', 'fileData', 'fileHash', 'fileType', 'parsedText', 'uploadDate',
     ])) return false;
     for (const field of ['fileName', 'fileData', 'fileType', 'uploadDate']) {
       if (typeof value.resume[field] !== 'string') return false;
@@ -111,7 +111,7 @@ function validateUserProfile(value: unknown): value is UserProfile {
   }
   if (value.resumes !== undefined) {
     if (!validateObjectArray(value.resumes, [
-      'id', 'category', 'fileName', 'fileData', 'fileType', 'parsedText', 'uploadDate',
+      'id', 'category', 'fileName', 'fileData', 'fileHash', 'fileType', 'parsedText', 'uploadDate',
     ])) return false;
     for (const resume of value.resumes) {
       for (const field of ['id', 'category', 'fileName', 'fileData', 'fileType', 'uploadDate']) {

@@ -33,7 +33,8 @@ console.log('Background service worker started');
 void StorageService.removeRetiredData().catch(error => {
   console.error('Failed to remove retired settings:', error);
 });
-void StorageService.migrateResumeFiles().catch(error => {
+// 迁移会改写 userProfile；消息处理需等它结束，避免并发保存被旧数据覆盖。
+const storageReady = StorageService.migrateResumeFiles().catch(error => {
   console.error('Failed to migrate resume files:', error);
 });
 
@@ -47,7 +48,8 @@ chrome.runtime.onMessage.addListener(
     sendResponse: (response: MessageResponse) => void
   ) => {
     // 处理异步消息
-    handleMessage(message, sender)
+    storageReady
+      .then(() => handleMessage(message, sender))
       .then(sendResponse)
       .catch((error) => {
         console.error('Message handler error:', error);
@@ -247,6 +249,7 @@ async function handleParseResume(
     resumeImportRequests.set(requestId, { controller: requestController, owner: importOwner(sender) });
   }
   const assertActive = () => { if (requestController.signal.aborted) throw new Error('已停止简历识别'); };
+  let unsavedResumeId: string | undefined;
   try {
     const rawText = preParsedText ?? await parseResume(fileData, fileType);
 
@@ -273,6 +276,7 @@ async function handleParseResume(
     const existing = currentLibrary.find(item => item.fileName === fileName && item.fileHash === fileHash);
     const resumeId = existing?.id || `resume-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
     await StorageService.saveResumeFile(resumeId, fileData);
+    if (!existing) unsavedResumeId = resumeId;
 
     const resume = createResumeVariant({
       fileName,
@@ -306,6 +310,7 @@ async function handleParseResume(
     if (!saved) {
       return { success: false, error: '简历已解析，但保存个人信息失败' };
     }
+    unsavedResumeId = undefined;
 
     return {
       success: true,
@@ -322,7 +327,11 @@ async function handleParseResume(
       success: false,
       error: error instanceof Error ? error.message : 'Failed to parse resume'
     };
-  } finally { if (requestId) resumeImportRequests.delete(requestId); }
+  } finally {
+    if (requestId) resumeImportRequests.delete(requestId);
+    // 资料没有保存成功时，新写入的文件无人引用，立即删除。
+    if (unsavedResumeId) await StorageService.removeResumeFiles([unsavedResumeId]).catch(() => {});
+  }
 }
 
 function backupFilename(date = new Date()): string {

@@ -205,6 +205,14 @@ test('拒绝非字符串简历正文', () => {
   if (!result.success) assert.equal(result.error.code, 'INVALID_USER_PROFILE');
 });
 
+test('拒绝非字符串简历哈希', () => {
+  const document = JSON.parse(validJson());
+  document.data.userProfile.resume.fileHash = 123;
+  const result = parseAndValidateBackup(JSON.stringify(document));
+  assert.equal(result.success, false);
+  if (!result.success) assert.equal(result.error.code, 'INVALID_USER_PROFILE');
+});
+
 test('拒绝超过 20 MiB 的输入', () => {
   const result = parseAndValidateBackup('x'.repeat(MAX_BACKUP_BYTES + 1));
   assert.equal(result.success, false);

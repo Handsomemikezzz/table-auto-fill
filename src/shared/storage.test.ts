@@ -9,6 +9,7 @@ import type { UserProfile } from './types.ts';
 
 function installChromeStorageMock(initial: Record<string, unknown> = {}) {
   const values: Record<string, unknown> = { ...initial };
+  const operations: string[] = [];
   const previousChrome = Object.getOwnPropertyDescriptor(globalThis, 'chrome');
   Object.defineProperty(globalThis, 'chrome', {
     configurable: true,
@@ -25,9 +26,11 @@ function installChromeStorageMock(initial: Record<string, unknown> = {}) {
             );
           },
           set: async (entries: Record<string, unknown>) => {
+            operations.push(`set:${Object.keys(entries).join(',')}`);
             Object.assign(values, entries);
           },
           remove: async (keys: string | string[]) => {
+            operations.push(`remove:${[keys].flat().join(',')}`);
             for (const key of Array.isArray(keys) ? keys : [keys]) delete values[key];
           },
           clear: async () => {
@@ -39,6 +42,7 @@ function installChromeStorageMock(initial: Record<string, unknown> = {}) {
   });
   return {
     values,
+    operations,
     restore: () => {
       if (previousChrome) Object.defineProperty(globalThis, 'chrome', previousChrome);
       else delete (globalThis as { chrome?: unknown }).chrome;
@@ -243,6 +247,59 @@ test('4. 清理孤儿文件', async () => {
 
     await StorageService.saveUserProfile(profileWithoutKeep);
     assert.equal('resumeFile:res-keep' in mock.values, false);
+  } finally {
+    mock.restore();
+  }
+});
+
+test('5. 迁移只执行一次，之后启动不再扫描全部存储', async () => {
+  const mock = installChromeStorageMock({
+    [STORAGE_KEYS.STORAGE_SCHEMA_VERSION]: 2,
+    'resumeFile:orphan': { fileData: 'data:orphan' },
+  });
+  try {
+    await StorageService.migrateResumeFiles();
+    assert.deepEqual(mock.operations, []);
+    assert.equal('resumeFile:orphan' in mock.values, true);
+  } finally {
+    mock.restore();
+  }
+});
+
+test('6. 删除简历时先写资料、再删文件', async () => {
+  const profile = (resumes: unknown[]) => ({
+    personal: { name: '赵六' }, education: [], experience: [], projects: [], customInformation: [], skills: [], certifications: [], resumes,
+  }) as unknown as UserProfile;
+  const kept = { id: 'keep', category: '', fileName: 'k.pdf', fileHash: 'h1', fileType: 'pdf', uploadDate: '2026-01-01' };
+  const mock = installChromeStorageMock({
+    'resumeFile:keep': { fileData: 'data:keep' },
+    'resumeFile:gone': { fileData: 'data:gone' },
+    [STORAGE_KEYS.USER_PROFILE]: profile([kept, { ...kept, id: 'gone', fileName: 'g.pdf', fileHash: 'h2' }]),
+  });
+  try {
+    assert.equal(await StorageService.saveUserProfile(profile([kept])), true);
+    assert.deepEqual(mock.operations, [`set:${STORAGE_KEYS.USER_PROFILE}`, 'remove:resumeFile:gone']);
+    assert.equal('resumeFile:keep' in mock.values, true);
+  } finally {
+    mock.restore();
+  }
+});
+
+test('7. 导入备份时按文件内容重算哈希并清理旧文件', async () => {
+  const mock = installChromeStorageMock({ 'resumeFile:old': { fileData: 'data:old' } });
+  try {
+    await StorageService.replaceBusinessData({
+      userProfile: {
+        personal: { name: '孙七' }, education: [], experience: [], projects: [], customInformation: [], skills: [], certifications: [],
+        resumes: [{ id: 'new', category: '', fileName: 'n.pdf', fileHash: 'forged', fileData: 'data:application/pdf;base64,QUJD', fileType: 'pdf', uploadDate: '2026-01-01' }],
+      } as never,
+      settings: null,
+    });
+    const stored = mock.values[STORAGE_KEYS.USER_PROFILE] as any;
+    assert.equal(stored.resumes[0].fileHash, await computeFileHash('data:application/pdf;base64,QUJD'));
+    assert.equal('fileData' in stored.resumes[0], false);
+    assert.deepEqual(mock.values['resumeFile:new'], { fileData: 'data:application/pdf;base64,QUJD' });
+    assert.equal('resumeFile:old' in mock.values, false);
   } finally {
     mock.restore();
   }
