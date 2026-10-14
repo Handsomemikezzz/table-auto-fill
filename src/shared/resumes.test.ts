@@ -14,7 +14,7 @@ import {
 
 const legacyResume = {
   fileName: '产品经理-张三.pdf',
-  fileData: 'data:application/pdf;base64,QQ==',
+  fileHash: '27525875a80ea27697e5690051977c01dd8d7760752e7af0f2658e13b9dd70a5',
   fileType: 'pdf',
   uploadDate: '2026-09-07T00:00:00.000Z',
 };
@@ -24,6 +24,19 @@ test('旧版单简历自动迁移为默认分类且保留原文件名', () => {
   assert.equal(library[0]?.id, LEGACY_RESUME_ID);
   assert.equal(library[0]?.category, '默认简历');
   assert.equal(library[0]?.fileName, '产品经理-张三.pdf');
+  assert.equal(library[0]?.fileHash, '27525875a80ea27697e5690051977c01dd8d7760752e7af0f2658e13b9dd70a5');
+});
+
+test('未迁移的旧版带 fileData 单简历也能读取', () => {
+  const library = getResumeLibrary({
+    resume: {
+      fileName: '旧版.pdf',
+      fileData: 'data:application/pdf;base64,QQ==',
+      fileType: 'pdf',
+      uploadDate: '2026-09-07T00:00:00.000Z',
+    } as any,
+  });
+  assert.equal(library[0]?.fileName, '旧版.pdf');
 });
 
 test('显式空简历库不会重新恢复旧版简历', () => {

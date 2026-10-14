@@ -20,6 +20,7 @@ import { parseResume, isStructuredType, parseStructuredResume } from '../parsers
 import { NLPHelper } from '../utils/nlpHelper.ts';
 import { ensureContentScriptForTab } from './contentScriptConnection.ts';
 import {
+  computeFileHash,
   createResumeProfileSnapshot,
   createResumeVariant,
   getResumeLibrary,
@@ -31,6 +32,9 @@ console.log('Background service worker started');
 
 void StorageService.removeRetiredData().catch(error => {
   console.error('Failed to remove retired settings:', error);
+});
+void StorageService.migrateResumeFiles().catch(error => {
+  console.error('Failed to migrate resume files:', error);
 });
 
 let personalFieldSaveQueue: Promise<unknown> = Promise.resolve();
@@ -264,18 +268,23 @@ async function handleParseResume(
     const currentProfile = await StorageService.getUserProfile();
     assertActive();
 
+    const fileHash = await computeFileHash(fileData);
+    const currentLibrary = getResumeLibrary(currentProfile || {});
+    const existing = currentLibrary.find(item => item.fileName === fileName && item.fileHash === fileHash);
+    const resumeId = existing?.id || `resume-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+    await StorageService.saveResumeFile(resumeId, fileData);
+
     const resume = createResumeVariant({
       fileName,
-      fileData,
+      fileHash,
       fileType,
       parsedText: rawText,
       uploadDate: new Date().toISOString(),
     }, {
-      id: `resume-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`,
+      id: resumeId,
       category,
       parsedProfile: createResumeProfileSnapshot(parsedData),
     });
-    const currentLibrary = getResumeLibrary(currentProfile || {});
     const baseProfile: UserProfile = currentProfile || {
       personal: {} as UserProfile['personal'],
       education: [],

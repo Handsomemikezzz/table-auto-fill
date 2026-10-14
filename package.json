@@ -11,7 +11,7 @@
     "test:extension-smoke": "node scripts/smoke-test-extension.js",
     "test:options": "tsx --test src/options/singlePageProfile.test.tsx src/options/DataBackupSettings.test.tsx src/options/ProfileImportDraft.test.tsx src/popup/productScope.test.tsx",
     "test:profile": "tsx --test src/shared/basicInfo.test.ts src/utils/fieldMatcher.test.ts",
-    "test": "node --experimental-strip-types --test src/shared/backup.test.ts src/shared/packageScripts.test.ts src/shared/resumes.test.ts src/utils/resume-parse.test.ts src/utils/dateValue.test.ts src/background/contentScriptConnection.test.ts src/content/infoOverlay.test.ts src/parsers/offscreen-routing.test.ts src/utils/optionResolver.test.ts src/content/datePickerAdapter.test.ts src/content/cascaderAdapter.test.ts src/content/fieldBinding.test.ts && npm run test:profile && npm run test:options && npm run test:autofill && npm run test:site-eval && npm run test:resume-review && npm run test:benchmark",
+    "test": "node --experimental-strip-types --test src/shared/storage.test.ts src/shared/backup.test.ts src/shared/packageScripts.test.ts src/shared/resumes.test.ts src/utils/resume-parse.test.ts src/utils/dateValue.test.ts src/background/contentScriptConnection.test.ts src/content/infoOverlay.test.ts src/parsers/offscreen-routing.test.ts src/utils/optionResolver.test.ts src/content/datePickerAdapter.test.ts src/content/cascaderAdapter.test.ts src/content/fieldBinding.test.ts && npm run test:profile && npm run test:options && npm run test:autofill && npm run test:site-eval && npm run test:resume-review && npm run test:benchmark",
     "preview": "vite preview",
     "test:form-fill": "npm run build && node scripts/test-form-fill.js",
     "test:form-fill:browser": "node scripts/test-form-fill.js",

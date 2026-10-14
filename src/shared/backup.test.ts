@@ -27,6 +27,7 @@ const completeData: BackupData = {
     certifications: [],
     resume: {
       fileName: 'resume.pdf',
+      fileHash: 'f02f176ead0be37e809134ac30db1f346cabc07360aad260dfe65bcdc7300f64',
       fileData: 'data:application/pdf;base64,QUJD',
       fileType: 'pdf',
       uploadDate: '2026-01-01T00:00:00.000Z',

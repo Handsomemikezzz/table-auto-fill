@@ -23,7 +23,9 @@ try {
   await waitFor(() => background.evaluate('Boolean(globalThis.chrome?.storage?.local)'), '扩展 API');
   await background.evaluate(`chrome.storage.local.set({ userProfile: {
     personal: { name: '测试用户', gender: '男', birthDate: '', phone: '', email: 'local@example.com' },
-    education: [], experience: [], projects: [], skills: [], certifications: [], customInformation: []
+    education: [], experience: [], projects: [], skills: [], certifications: [], customInformation: [],
+    resume: { fileName: 'test.pdf', fileData: 'data:application/pdf;base64,QUJD', fileType: 'pdf', uploadDate: '2026-10-01' },
+    resumes: [{ id: 'r1', category: '默认', fileName: 'test.pdf', fileData: 'data:application/pdf;base64,QUJD', fileType: 'pdf', uploadDate: '2026-10-01' }]
   }, llmConfig: { provider: 'custom', model: 'retired', baseUrl: '${url}v1', apiKey: 'retired-key' } })`);
   const target = await waitFor(async () => (await browser.targets()).find(target => target.type === 'page' && target.url === url), '测试页面');
   const page = await connectCdp(target.webSocketDebuggerUrl); connections.push(page); await page.send('Runtime.enable');
@@ -73,7 +75,10 @@ try {
     return !('llmConfig' in values) && values;
   }, '旧模型配置清理');
   assert.equal(stored.userProfile.personal.name, '测试用户');
-  console.log('✓ 扩展启动清理旧 API Key，并保留个人资料');
+  assert.equal('fileData' in (stored.userProfile.resume || {}), false);
+  assert.equal((stored.userProfile.resumes || []).some(r => 'fileData' in r), false);
+  assert.equal(stored['resumeFile:r1']?.fileData, 'data:application/pdf;base64,QUJD');
+  console.log('✓ 扩展启动清理旧 API Key，迁移简历文件单独存储，并保留个人资料');
 } finally {
   for (const connection of connections) connection.close();
   if (browser) await browser.close();

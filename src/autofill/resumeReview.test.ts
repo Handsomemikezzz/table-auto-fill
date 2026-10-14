@@ -27,7 +27,7 @@ test('imports matching records by identity, fills gaps and preserves conflicting
 });
 test('review save preserves uploaded files and unrelated concurrent facts, rejects overlapping changes', () => {
   const draft = createPrefilledReview(empty, { personal: { phone: '13800138000' }, rawText: '' });
-  const latest = { ...empty, personal: { ...empty.personal, email: 'new@example.com' }, resumes: [{ id: 'file', category: '', fileName: 'r.pdf', fileData: 'data:', fileType: 'pdf', uploadDate: '2026-10-01' }] };
+  const latest = { ...empty, personal: { ...empty.personal, email: 'new@example.com' }, resumes: [{ id: 'file', category: '', fileName: 'r.pdf', fileHash: 'mock-hash', fileType: 'pdf', uploadDate: '2026-10-01' }] };
   const result = mergeReviewedProfile(empty, draft, latest);
   assert.equal(result.personal.email, latest.personal.email); assert.equal(result.resumes?.length, 1);
   assert.throws(() => mergeReviewedProfile(empty, draft, { ...latest, personal: { ...latest.personal, phone: 'another' } }), /其他页面更新/);
@@ -61,7 +61,7 @@ test('rich facts survive parsing, review, backup and selected-resume fact snapsh
   const parsed = normalizeParsedResume(richResume, richResume.rawText);
   const reviewed = mergeReviewedProfile(empty, createPrefilledReview(empty, parsed), empty);
   const snapshot = createResumeProfileSnapshot({ ...reviewed, rawText: richResume.rawText });
-  const profile = { ...reviewed, resumes: [{ id: 'rich', category: '研究岗位', fileName: 'rich.pdf', fileData: 'data:application/pdf;base64,QQ==', fileType: 'pdf', uploadDate: '2026-10-01', parsedProfile: snapshot }] };
+  const profile = { ...reviewed, resumes: [{ id: 'rich', category: '研究岗位', fileName: 'rich.pdf', fileHash: '27525875a80ea27697e5690051977c01dd8d7760752e7af0f2658e13b9dd70a5', fileData: 'data:application/pdf;base64,QQ==', fileType: 'pdf', uploadDate: '2026-10-01', parsedProfile: snapshot }] };
   const backup = parseAndValidateBackup(serializeBackup(createBackupDocument({ userProfile: profile, settings: null }, 'test')));
   assert(backup.success);
   const restored = backup.document.data.userProfile!;
@@ -102,7 +102,7 @@ test('backups reject malformed supplemental records in global and resume-specifi
     assert.equal(parseAndValidateBackup(JSON.stringify(bad)).success, false, collection);
   }
   const badSnapshot = structuredClone(document);
-  badSnapshot.data.userProfile!.resumes = [{ id: 'bad', category: '', fileName: 'x', fileType: 'txt', fileData: '', uploadDate: '', parsedProfile: { ...createResumeProfileSnapshot(richResume), languages: [{ id: 'bad', language: 42 }] as never } }];
+  badSnapshot.data.userProfile!.resumes = [{ id: 'bad', category: '', fileName: 'x', fileType: 'txt', fileHash: 'hash-bad', fileData: '', uploadDate: '', parsedProfile: { ...createResumeProfileSnapshot(richResume), languages: [{ id: 'bad', language: 42 }] as never } }];
   assert.equal(parseAndValidateBackup(JSON.stringify(badSnapshot)).success, false);
 });
 test('canonical and editor JSON imports preserve supplemental and unfamiliar labelled facts', () => {

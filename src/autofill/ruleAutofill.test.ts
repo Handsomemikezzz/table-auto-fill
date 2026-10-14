@@ -42,7 +42,7 @@ test('snapshots are isolated, stable and keep record IDs through reorder', () =>
   assert.notEqual(createProfileSnapshot(copy).version, frozen.version);
 });
 test('selected profile never silently inherits unrelated record facts by index', () => {
-  const variant = { id: 'r1', category: '岗位', fileName: 'r.pdf', fileData: 'data:', fileType: 'pdf', uploadDate: 'now', parsedProfile: { personal: {}, education: [{ ...profile.education[0], school: '其他学校', id: 'other', college: '' }], experience: [], projects: [], skills: [] } };
+  const variant = { id: 'r1', category: '岗位', fileName: 'r.pdf', fileHash: 'mock-hash', fileType: 'pdf', uploadDate: 'now', parsedProfile: { personal: {}, education: [{ ...profile.education[0], school: '其他学校', id: 'other', college: '' }], experience: [], projects: [], skills: [] } };
   const selected = createProfileSnapshot({ ...profile, education: [{ ...profile.education[0], college: '已确认学院' }], resumes: [variant] }, 'r1');
   assert(!selected.facts.some(fact => fact.value === '已确认学院'));
   assert.equal(selected.facts.find(fact => fact.meaningId === 'personal.name')?.value, '小王');

@@ -26,7 +26,7 @@ export async function beginFillSession(payload: { sessionId: string; sourceId: s
   }
   const context = { sessionId: payload.sessionId, corrections: [], saveProfileVersion: baseProfileVersion, profile: snapshot, registry, registryVersion: registryVersion(registry) };
   const origin = sender.url ? new URL(sender.url).origin : payload.origin;
-  sessions.set(payload.sessionId, { ...context, origin, owner: ownerOf(sender), controller: new AbortController(), createdAt: Date.now(), baseProfileVersion, attachmentId: attachment?.id, attachmentVersion: attachment ? versionOf(attachment.fileData) : undefined });
+  sessions.set(payload.sessionId, { ...context, origin, owner: ownerOf(sender), controller: new AbortController(), createdAt: Date.now(), baseProfileVersion, attachmentId: attachment?.id, attachmentVersion: attachment?.fileHash });
   return context;
 }
 export function endFillSession(id: string, sender: chrome.runtime.MessageSender) {
@@ -39,6 +39,8 @@ export async function getSessionAttachment(sessionId: string, factId: string, se
   if (!session || session.owner !== ownerOf(sender) || session.controller.signal.aborted || !session.attachmentId || factId !== `attachment:${session.attachmentId}`) throw new Error('附件选择已失效');
   const profile = await StorageService.getUserProfile();
   const attachment = profile && getResumeLibrary(profile).find(item => item.id === session.attachmentId);
-  if (!attachment || versionOf(attachment.fileData) !== session.attachmentVersion || attachment.fileName !== session.profile.facts.find(fact => fact.id === factId)?.value) throw new Error('附件已变化');
-  return attachment;
+  if (!attachment || attachment.fileHash !== session.attachmentVersion || attachment.fileName !== session.profile.facts.find(fact => fact.id === factId)?.value) throw new Error('附件已变化');
+  const fileData = await StorageService.getResumeFile(attachment.id);
+  if (!fileData) throw new Error('附件文件已丢失');
+  return { ...attachment, fileData };
 }

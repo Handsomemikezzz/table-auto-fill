@@ -158,11 +158,23 @@ export function createResumeProfileSnapshot(parsed: ParsedResumeData): ResumePro
   });
 }
 
+export async function computeFileHash(fileData: string): Promise<string> {
+  const buffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(fileData));
+  return Array.from(new Uint8Array(buffer))
+    .map(byte => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 export function getResumeLibrary(profile: Pick<UserProfile, 'resume' | 'resumes'>): ResumeVariant[] {
   // 显式空数组表示用户已经删除全部简历，不能再从旧版 resume 字段复活。
   if (profile.resumes !== undefined) return profile.resumes;
-  return profile.resume?.fileData
-    ? [{ ...profile.resume, id: LEGACY_RESUME_ID, category: '默认简历' }]
+  return profile.resume?.fileName && (profile.resume?.fileHash || (profile.resume as any)?.fileData)
+    ? [{
+        ...profile.resume,
+        id: (profile.resume as any).id || LEGACY_RESUME_ID,
+        category: (profile.resume as any).category || '默认简历',
+        fileHash: profile.resume.fileHash || '',
+      } as ResumeVariant]
     : [];
 }
 
@@ -172,7 +184,7 @@ export function upsertResumeVariant(
   incoming: ResumeVariant,
 ): ResumeVariant[] {
   const existingIndex = library.findIndex(item => (
-    item.fileName === incoming.fileName && item.fileData === incoming.fileData
+    item.fileName === incoming.fileName && item.fileHash === incoming.fileHash
   ));
   if (existingIndex < 0) return [...library, incoming];
 
@@ -185,8 +197,8 @@ export function removeResumeVariant(profile: UserProfile, id: string): UserProfi
   const removed = (profile.resumes || []).find(item => item.id === id);
   if (!removed) return profile;
   const resumes = (profile.resumes || []).filter(item => item.id !== id);
-  const legacyWasRemoved = profile.resume?.fileData === removed.fileData
-    && profile.resume?.fileName === removed.fileName;
+  const legacyWasRemoved = profile.resume?.fileName === removed.fileName
+    && (profile.resume?.fileHash === removed.fileHash || (profile.resume as any)?.fileData === (removed as any).fileData);
   return {
     ...profile,
     resumes,

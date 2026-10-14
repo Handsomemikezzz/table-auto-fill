@@ -111,9 +111,13 @@ export interface SupplementalProfile {
   additionalInfo?: AdditionalInfo[];
 }
 
+export interface ResumeFileRecord {
+  fileData: string; // Base64编码
+}
+
 export interface ResumeInfo {
   fileName: string;
-  fileData: string; // Base64编码
+  fileHash: string; // 文件内容的 SHA-256
   fileType: string;
   parsedText?: string;
   uploadDate: string;
@@ -137,8 +141,16 @@ export interface ResumeVariant extends ResumeInfo {
 
 export type SettingsData = Record<string, unknown>;
 
+export type BackupResumeInfo = ResumeInfo & Partial<ResumeFileRecord>;
+export type BackupResumeVariant = ResumeVariant & Partial<ResumeFileRecord>;
+
+export type BackupUserProfile = Omit<UserProfile, 'resume' | 'resumes'> & {
+  resume?: BackupResumeInfo;
+  resumes?: BackupResumeVariant[];
+};
+
 export interface BackupData {
-  userProfile: UserProfile | null;
+  userProfile: BackupUserProfile | null;
   settings: SettingsData | null;
   /** Opaque legacy backup data; the application-tracking feature has been removed. */
   applicationRecords?: Record<string, unknown>[] | null;
