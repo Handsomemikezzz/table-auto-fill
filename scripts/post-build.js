@@ -78,8 +78,17 @@ try {
   mkdirSync(join(ocrDir, 'core'), { recursive: true });
   mkdirSync(join(ocrDir, 'lang'), { recursive: true });
   copyFileSync(join(projectRoot, 'node_modules/tesseract.js/dist/worker.min.js'), join(ocrDir, 'worker.min.js'));
-  for (const file of readdirSync(join(projectRoot, 'node_modules/tesseract.js-core')).filter(file => /\.wasm(?:\.js)?$/.test(file))) {
-    copyFileSync(join(projectRoot, 'node_modules/tesseract.js-core', file), join(ocrDir, 'core', file));
+  const requiredWasmFiles = [
+    'tesseract-core-relaxedsimd-lstm.wasm.js',
+    'tesseract-core-simd-lstm.wasm.js',
+    'tesseract-core-lstm.wasm.js',
+  ];
+  for (const file of requiredWasmFiles) {
+    const src = join(projectRoot, 'node_modules/tesseract.js-core', file);
+    if (!existsSync(src)) {
+      throw new Error(`缺少必需的 Tesseract 核心文件: ${file}`);
+    }
+    copyFileSync(src, join(ocrDir, 'core', file));
   }
   for (const language of ['eng', 'chi_sim']) {
     copyFileSync(join(projectRoot, 'node_modules/@tesseract.js-data', language, '4.0.0_best_int', `${language}.traineddata.gz`), join(ocrDir, 'lang', `${language}.traineddata.gz`));

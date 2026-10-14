@@ -22,12 +22,12 @@ export async function extractResumePDF(base64Data: string, options: ExtractionOp
     console.log('[PDF Parser] PDF.js loaded, version:', pdfjsLib.version);
 
     // 在扩展环境且存在 DOM 时使用打包的 worker 文件
-    if (hasDOM && typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
+    if (hasDOM && typeof chrome !== 'undefined' && chrome.runtime?.getURL) {
       pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('pdf.worker.min.js');
       console.log('[PDF Parser] Worker path set to:', pdfjsLib.GlobalWorkerOptions.workerSrc);
     } else if (hasDOM) {
       // 开发环境备用方案
-      pdfjsLib.GlobalWorkerOptions.workerSrc = (await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')).default;
+      pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
     } else {
       console.log('[PDF Parser] No DOM detected, parsing PDF without worker');
     }

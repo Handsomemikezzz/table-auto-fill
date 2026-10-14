@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { createCanvas, loadImage } from 'canvas';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -38,17 +37,30 @@ try {
     const canvas = document.createElement('canvas'); canvas.width = 1400; canvas.height = 700;
     const context = canvas.getContext('2d'); context.fillStyle = '#fff'; context.fillRect(0,0,1400,700); context.fillStyle = '#111'; context.font = '48px Arial';
     ['个人简历', '姓名：张三', '电话：13800138000', '邮箱：alex@example.com', '教育经历', '复旦大学 本科 软件工程 2018-09 - 2022-06', '技能：TypeScript React'].forEach((line, index) => context.fillText(line, 50, 90 + index * 85));
-    return canvas.toDataURL('image/png');
+    const data = context.getImageData(0, 0, 1400, 700).data;
+    const rgb = new Uint8Array(1400 * 700 * 3);
+    for (let s = 0, d = 0; s < data.length; s += 4) {
+      rgb[d++] = data[s];
+      rgb[d++] = data[s + 1];
+      rgb[d++] = data[s + 2];
+    }
+    let binary = '';
+    const chunk = 8192;
+    for (let i = 0; i < rgb.length; i += chunk) {
+      binary += String.fromCharCode.apply(null, rgb.subarray(i, i + chunk));
+    }
+    return {
+      pngDataUrl: canvas.toDataURL('image/png'),
+      rgbBase64: btoa(binary),
+      width: 1400,
+      height: 700,
+    };
   })()`);
-  const png = join(temp, 'synthetic-resume.png'); writeFileSync(png, Buffer.from(graphic.split(',')[1], 'base64'));
-  const bitmap = await loadImage(Buffer.from(graphic.split(',')[1], 'base64'));
-  const raster = createCanvas(bitmap.width, bitmap.height); raster.getContext('2d').drawImage(bitmap,0,0);
-  const rgba = raster.getContext('2d').getImageData(0,0,bitmap.width,bitmap.height).data;
-  const rgb = Buffer.alloc(bitmap.width * bitmap.height * 3);
-  for (let source = 0, destination = 0; source < rgba.length; source += 4) { rgb[destination++] = rgba[source]; rgb[destination++] = rgba[source + 1]; rgb[destination++] = rgba[source + 2]; }
+  const png = join(temp, 'synthetic-resume.png'); writeFileSync(png, Buffer.from(graphic.pngDataUrl.split(',')[1], 'base64'));
+  const rgb = Buffer.from(graphic.rgbBase64, 'base64');
   const image = deflateSync(rgb); const command = 'q 600 0 0 300 0 0 cm /Img Do Q';
   const scanned = join(temp, 'synthetic-scanned.pdf');
-  writeFileSync(scanned, pdfFile(['<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pages /Kids [3 0 R] /Count 1 >>','<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 300] /Resources << /XObject << /Img 4 0 R >> >> /Contents 5 0 R >>', Buffer.concat([Buffer.from(`<< /Type /XObject /Subtype /Image /Width ${bitmap.width} /Height ${bitmap.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length ${image.length} >>\nstream\n`),image,Buffer.from('\nendstream')]),`<< /Length ${command.length} >>\nstream\n${command}\nendstream`]));
+  writeFileSync(scanned, pdfFile(['<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pages /Kids [3 0 R] /Count 1 >>','<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 300] /Resources << /XObject << /Img 4 0 R >> >> /Contents 5 0 R >>', Buffer.concat([Buffer.from(`<< /Type /XObject /Subtype /Image /Width ${graphic.width} /Height ${graphic.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length ${image.length} >>\nstream\n`),image,Buffer.from('\nendstream')]),`<< /Length ${command.length} >>\nstream\n${command}\nendstream`]));
   const text = 'BT /F1 18 Tf 30 550 Td (Name: Alex Example) Tj 0 -30 Td (Phone: 13800138000) Tj 0 -30 Td (Email: alex@example.com) Tj 0 -30 Td (Education: Test University Computer Science Bachelor 2018-09 - 2022-06) Tj ET';
   const native = join(temp, 'synthetic-text.pdf');
   writeFileSync(native, pdfFile(['<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pages /Kids [3 0 R] /Count 1 >>','<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 600] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>','<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',`<< /Length ${text.length} >>\nstream\n${text}\nendstream`]));

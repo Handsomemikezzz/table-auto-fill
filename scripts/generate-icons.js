@@ -1,4 +1,3 @@
-import { createCanvas, loadImage } from 'canvas';
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -12,6 +11,15 @@ const sourceIcon = join(iconsDir, 'fill-ease-master.png');
 if (!existsSync(iconsDir)) {
   mkdirSync(iconsDir, { recursive: true });
 }
+
+let canvasModule;
+try {
+  canvasModule = await import('canvas');
+} catch {
+  console.error('如需重新生成图标，请临时安装 canvas: npm i -D canvas');
+  process.exit(1);
+}
+const { createCanvas, loadImage } = canvasModule;
 
 async function generateIcon(size) {
   const canvas = createCanvas(size, size);
