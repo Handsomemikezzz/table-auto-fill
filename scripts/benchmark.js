@@ -90,7 +90,12 @@ try {
   await background.send('Runtime.enable');
   await waitFor(() => background.evaluate('typeof chrome !== "undefined" && Boolean(chrome.storage?.local && chrome.tabs?.query)'), 'extension APIs initialized');
   metadata.environment.browserVersion = execFileSync(findBrowserExecutable(), ['--version'], { encoding: 'utf8' }).trim();
-  const send = (type, payload) => background.evaluate(`(async () => { const tab = (await chrome.tabs.query({url:${JSON.stringify(base + '/*')}}))[0]; if (!tab?.id) throw new Error('No fixture tab'); return chrome.tabs.sendMessage(tab.id, ${JSON.stringify({ type, ...(payload ? { payload } : {}) })}, {frameId:0}); })()`);
+  const send = (type, payload) => background.evaluate(`(async () => {
+    const tab = (await chrome.tabs.query({url:${JSON.stringify(base + '/*')}}))[0];
+    if (!tab?.id) throw new Error('No fixture tab');
+    await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, files: ['content.js'] }).catch(() => {});
+    return chrome.tabs.sendMessage(tab.id, ${JSON.stringify({ type, ...(payload ? { payload } : {}) })}, {frameId:0});
+  })()`);
   try {
     for (const siteId of manifest.sources) for (const profileId of manifest.profiles) for (const state of manifest.states) {
       const id = `${siteId}/${profileId}/${state}`;

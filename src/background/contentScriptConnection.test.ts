@@ -116,3 +116,110 @@ test('主页面已连接时只补注入失联 iframe，不会误报主页面启�
     (globalThis as { chrome?: unknown }).chrome = originalChrome;
   }
 });
+
+test('ensureFrames 只向未连接的 frame 注入脚本', async () => {
+  const originalChrome = (globalThis as { chrome?: unknown }).chrome;
+  const injectedFrameIds: number[] = [];
+  (globalThis as { chrome?: unknown }).chrome = {
+    tabs: {
+      async sendMessage(_tabId: number, _message: unknown, options: { frameId: number }) {
+        if (options.frameId === 1) return { success: true, data: { ready: true } };
+        throw new Error('Could not establish connection');
+      },
+    },
+    scripting: {
+      async executeScript(options: { target: { frameIds: number[] } }) {
+        injectedFrameIds.push(...options.target.frameIds);
+      },
+    },
+  };
+
+  try {
+    const { ensureFrames } = await import('./contentScriptConnection.ts');
+    const result = await ensureFrames(10, [1, 2, 3]);
+    assert.deepEqual(result.readyFrameIds, [1]);
+    assert.deepEqual(injectedFrameIds, [2, 3]);
+  } finally {
+    (globalThis as { chrome?: unknown }).chrome = originalChrome;
+  }
+});
+
+test('用户启用标签页后记录到 session 存储，并在主页面跳转或关闭时清理', async () => {
+  const originalChrome = (globalThis as { chrome?: unknown }).chrome;
+  const sessionStore: Record<string, unknown> = {};
+  let committedListener: ((details: { tabId: number; frameId: number }) => Promise<void>) | undefined;
+  let removedListener: ((tabId: number) => void) | undefined;
+  const injectedFrames: { tabId: number; frameId: number }[] = [];
+
+  (globalThis as { chrome?: unknown }).chrome = {
+    storage: {
+      session: {
+        async get(key: string) { return { [key]: sessionStore[key] }; },
+        async set(obj: Record<string, unknown>) { Object.assign(sessionStore, obj); },
+      },
+    },
+    webNavigation: {
+      onCommitted: {
+        addListener(fn: (details: { tabId: number; frameId: number }) => Promise<void>) {
+          committedListener = fn;
+        },
+      },
+    },
+    tabs: {
+      onRemoved: {
+        addListener(fn: (tabId: number) => void) {
+          removedListener = fn;
+        },
+      },
+    },
+    scripting: {
+      async executeScript(options: { target: { tabId: number; frameIds: number[] } }) {
+        for (const frameId of options.target.frameIds) {
+          injectedFrames.push({ tabId: options.target.tabId, frameId });
+        }
+      },
+    },
+  };
+
+  try {
+    const {
+      markTabAsEnabled,
+      isTabEnabled,
+      initContentScriptListeners,
+    } = await import('./contentScriptConnection.ts');
+
+    initContentScriptListeners();
+    assert.ok(committedListener, 'committedListener 应注册');
+    assert.ok(removedListener, 'removedListener 应注册');
+
+    // 初始状态未启用
+    assert.equal(await isTabEnabled(42), false);
+
+    // 启用 tab 42
+    await markTabAsEnabled(42);
+    assert.equal(await isTabEnabled(42), true);
+
+    // 未启用的 tab 99 中产生 iframe，不应注入
+    await committedListener!({ tabId: 99, frameId: 5 });
+    assert.equal(injectedFrames.length, 0);
+
+    // 启用的 tab 42 中产生新 iframe (frameId=3)，自动补注入
+    await committedListener!({ tabId: 42, frameId: 3 });
+    assert.deepEqual(injectedFrames, [{ tabId: 42, frameId: 3 }]);
+
+    // 主页面发生跳转 (frameId=0)，清掉 tab 42 记录
+    await committedListener!({ tabId: 42, frameId: 0 });
+    assert.equal(await isTabEnabled(42), false);
+
+    // 再次启用 tab 42，并通过 tabs.onRemoved 关闭标签页
+    await markTabAsEnabled(42);
+    assert.equal(await isTabEnabled(42), true);
+    removedListener!(42);
+    // 给异步一点时间
+    await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(await isTabEnabled(42), false);
+  } finally {
+    (globalThis as { chrome?: unknown }).chrome = originalChrome;
+  }
+});
+

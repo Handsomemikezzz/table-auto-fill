@@ -204,7 +204,7 @@ async function stableVerification(state: AttemptState, expected: ExpectedControl
     } else stableSince = null;
     await pause(Math.min(40, Math.max(1, end - Date.now())));
   }
-  return outcome(state, isValid(state.element) ? 'unverified' : 'rejected',
+  return interrupted(state, expected.value) || outcome(state, isValid(state.element) ? 'unverified' : 'rejected',
     isValid(state.element) ? '未能验证组件已稳定接受目标值' : '页面校验未通过', expected.value);
 }
 

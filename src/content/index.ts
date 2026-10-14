@@ -11,7 +11,16 @@ import type { FillContextData, FieldObservation } from '../autofill/contracts.ts
 import type { FillOutcome } from '../shared/fillModel.ts';
 import type { Message, MessageResponse, UserProfile, FocusedFieldWriteResult } from '../shared/types.ts';
 
-const formFiller = new FormFiller();
+declare global {
+  // eslint-disable-next-line no-var
+  var __fillEaseLoaded: boolean | undefined;
+}
+
+(() => {
+  if (globalThis.__fillEaseLoaded) return;
+  globalThis.__fillEaseLoaded = true;
+
+  const formFiller = new FormFiller();
 let session: FillSessionController | undefined;
 let starting = false;
 let localSessionId = '';
@@ -181,3 +190,5 @@ chrome.runtime.onMessage.addListener((message: Message, sender, respond) => {
       return run(formFiller.fillFocusedControl(lastFocusedControl, message.payload.value).then(written => ({ written, reason: written ? undefined : 'VALUE_REJECTED' })));
   }
 });
+})();
+

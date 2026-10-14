@@ -31,7 +31,9 @@ try {
   const page = await connectCdp(target.webSocketDebuggerUrl); connections.push(page); await page.send('Runtime.enable');
   await waitFor(() => background.evaluate(`(async () => {
     const tab = (await chrome.tabs.query({ url: '${url}' }))[0];
-    return tab?.id && (await chrome.tabs.sendMessage(tab.id, { type: 'PING_CONTENT' }, { frameId: 0 })).success;
+    if (!tab?.id) return false;
+    await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, files: ['content.js'] }).catch(() => {});
+    return (await chrome.tabs.sendMessage(tab.id, { type: 'PING_CONTENT' }, { frameId: 0 })).success;
   })()`), 'DOM 填写器初始化');
   await waitFor(() => page.evaluate("Boolean(document.querySelector('iframe').contentDocument.querySelector('#email'))"), 'iframe');
   await background.evaluate(`(async () => {

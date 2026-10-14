@@ -104,6 +104,7 @@ async function prepareExtension(scenario) {
   await waitFor(() => background.evaluate(`(async () => {
     const tab = (await chrome.tabs.query({ url: ${JSON.stringify(fixtureUrl + '*')} }))[0];
     if (!tab?.id) return false;
+    await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, files: ['content.js'] }).catch(() => {});
     return (await chrome.tabs.sendMessage(tab.id, { type: 'PING_CONTENT' }, { frameId: 0 }))?.success;
   })()`), '扩展 content script 可接收消息');
   const fixtureProfile = {
@@ -369,6 +370,37 @@ try {
     assert.equal(await page.evaluate("document.querySelector('iframe').contentDocument.querySelectorAll('[data-job-applymate-task]').length"), 0);
     assert.equal(await page.evaluate("document.querySelector('iframe').contentWindow.formFixture.snapshot().state.name"), '测试用户');
   });
+  await check('动态插入 iframe、about:blank 与 srcdoc 均能安全处理并完成跨 frame 填写', async () => {
+    await prepareExtension('react-text');
+    await page.evaluate(`(() => {
+      const blankFrame = document.createElement('iframe');
+      blankFrame.id = 'test-blank-frame';
+      blankFrame.src = 'about:blank';
+      document.body.append(blankFrame);
+
+      const srcdocFrame = document.createElement('iframe');
+      srcdocFrame.id = 'test-srcdoc-frame';
+      srcdocFrame.srcdoc = '<div><label for="srcdoc-input">备用备注</label><input id="srcdoc-input" name="remark" /></div>';
+      document.body.append(srcdocFrame);
+
+      const dynFrame = document.createElement('iframe');
+      dynFrame.id = 'test-dynamic-biz-frame';
+      dynFrame.src = ${JSON.stringify(fixtureUrl + '?scenario=react-text')};
+      document.body.append(dynFrame);
+    })()`);
+    await waitFor(() => page.evaluate("Boolean(document.querySelector('#test-dynamic-biz-frame')?.contentWindow?.formFixture)"), '动态表单子框架加载');
+
+    await background.evaluate(`(async () => {
+      const tab = (await chrome.tabs.query({ url: ${JSON.stringify(fixtureUrl + '*')} }))[0];
+      return chrome.tabs.sendMessage(tab.id, { type: 'START_FILL_SESSION', payload: { sourceId: 'default' } }, { frameId: 0 });
+    })()`);
+    await waitForSession();
+
+    assert.equal(await page.evaluate("document.querySelector('#name').value"), '测试用户');
+    assert.equal(await page.evaluate("document.querySelector('#test-dynamic-biz-frame').contentWindow.formFixture.snapshot().state.name"), '测试用户');
+    const exceptions = page.events.filter(event => event.method === 'Runtime.exceptionThrown');
+    assert.equal(exceptions.length, 0, JSON.stringify(exceptions));
+  });
   for (const [scenario, key, expected] of [['existing-text', 'name', '用户原有姓名'], ['existing-radio', 'gender', 'f']]) {
     await check(`规则填写保留原有答案：${scenario}`, async () => {
       const { response, snapshot } = await extensionFill(scenario);
@@ -409,7 +441,12 @@ try {
     const secondOrigin = fixtureUrl.replace('127.0.0.1', 'localhost');
     await page.send('Page.navigate', { url: secondOrigin + '?scenario=personal-extra' });
     await waitFor(() => page.evaluate('Boolean(window.formFixture)'), '第二个网站加载');
-    await waitFor(() => background.evaluate(`(async () => { const tab = (await chrome.tabs.query({ url: ${JSON.stringify(secondOrigin + '*')} }))[0]; return tab?.id && (await chrome.tabs.sendMessage(tab.id, { type: 'PING_CONTENT' }, { frameId: 0 }))?.success; })()`), '第二个网站连接');
+    await waitFor(() => background.evaluate(`(async () => {
+      const tab = (await chrome.tabs.query({ url: ${JSON.stringify(secondOrigin + '*')} }))[0];
+      if (!tab?.id) return false;
+      await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, files: ['content.js'] }).catch(() => {});
+      return (await chrome.tabs.sendMessage(tab.id, { type: 'PING_CONTENT' }, { frameId: 0 }))?.success;
+    })()`), '第二个网站连接');
     await start(secondOrigin);
     await waitForSession(secondOrigin);
     assert.equal(networkRequests.length, 0);
