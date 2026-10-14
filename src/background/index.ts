@@ -18,7 +18,7 @@ import {
 } from '../shared/backup.ts';
 import { parseResume, isStructuredType, parseStructuredResume } from '../parsers/index.ts';
 import { NLPHelper } from '../utils/nlpHelper.ts';
-import { ensureContentScriptForTab } from './contentScriptConnection.ts';
+import { ensureContentScriptForTab, initContentScriptListeners } from './contentScriptConnection.ts';
 import {
   computeFileHash,
   createResumeProfileSnapshot,
@@ -29,6 +29,8 @@ import {
 
 // Background Service Worker 入口
 console.log('Background service worker started');
+
+initContentScriptListeners();
 
 void StorageService.removeRetiredData().catch(error => {
   console.error('Failed to remove retired settings:', error);

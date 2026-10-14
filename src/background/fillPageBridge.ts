@@ -1,4 +1,5 @@
 import { getSessionAttachment } from './fillSessions.ts';
+import { ensureFrames } from './contentScriptConnection.ts';
 import type { FieldObservation } from '../autofill/contracts.ts';
 import type { MessageResponse } from '../shared/types.ts';
 
@@ -13,6 +14,9 @@ export async function bridgeFillPage(payload: Record<string, any>, sender: chrom
   };
   if (payload.action === 'observe' || payload.action === 'cancel' || payload.action === 'undo') {
     const frames = payload.region ? [{ frameId: 0 }] : await chrome.webNavigation.getAllFrames({ tabId }) || [{ frameId: 0 }];
+    if (payload.action === 'observe') {
+      await ensureFrames(tabId, frames.map(frame => frame.frameId));
+    }
     const results = await Promise.allSettled(frames.map(async frame => {
       const data = await relay(frame.frameId, { ...payload, frameId: frame.frameId });
       return payload.action === 'observe' ? (data as FieldObservation[]).map(field => ({ ...field, fieldId: `${frame.frameId}/${field.fieldId}`, groupId: `${frame.frameId}/${field.groupId}`, frameId: String(frame.frameId) })) : data;
